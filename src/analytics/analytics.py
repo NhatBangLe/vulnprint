@@ -1,6 +1,3 @@
-import os
-import sys
-import argparse
 import logging
 
 try:
@@ -61,41 +58,3 @@ class CLIAnalyticsService(AnalyticsService):
 
         except Exception as e:
             self._logger.error(f"Error displaying analytics: {e}")
-
-
-if __name__ == "__main__":
-    # Ensure the necessary paths are in sys.path for direct script execution
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    parent_dir = os.path.dirname(current_dir)
-    grandparent_dir = os.path.dirname(parent_dir)
-    if current_dir not in sys.path:
-        sys.path.insert(0, current_dir)
-    if parent_dir not in sys.path:
-        sys.path.insert(0, parent_dir)
-    if grandparent_dir not in sys.path:
-        sys.path.insert(0, grandparent_dir)
-
-    try:
-        from src.config import settings
-        from src.database import SQLiteVulnerabilityRepository
-    except ImportError:
-        from config import settings
-        from database import SQLiteVulnerabilityRepository
-
-    # Configure fallback default logging if run directly
-    logging.basicConfig(level=logging.INFO)
-
-    repo = SQLiteVulnerabilityRepository(db_path=settings.database_path)
-    service = CLIAnalyticsService(repository=repo)
-
-    parser = argparse.ArgumentParser(
-        description="Vulnprint Statistical Analytics Engine"
-    )
-    parser.add_argument(
-        "--summary", action="store_true", help="Display technology distribution metrics"
-    )
-
-    args = parser.parse_args()
-
-    # Run the dashboard metrics display
-    service.display_dashboard()
