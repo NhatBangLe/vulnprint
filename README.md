@@ -1,12 +1,8 @@
-Here is a comprehensive, production-ready `README.md` for your Git repository. It is designed to be visually clean, professional, and clear about the project's architecture and philosophy.
-
----
-
 # 📑 Vulnprint
 
 **Vulnprint** is a 100% self-hosted, open-source **Vulnerability Intelligence Analytics & Lab Blueprint Engine**. It bridges the gap between active threat framework intelligence and local penetration testing labs.
 
-Instead of relying on brittle, automated infrastructure scripts that constantly break due to legacy software dependency hell, Vulnprint treats vulnerability discovery analytically. It dynamically queries a live Metasploit instance via RPC, uses a local Small Language Model (SLM) to extract structured application configurations, logs the metrics into a local database ledger, and generates high-fidelity **Lab Blueprint Manuals** and **Statistical Reports**.
+Instead of relying on brittle, automated infrastructure scripts that constantly break due to legacy software dependency hell, Vulnprint treats vulnerability discovery analytically. It dynamically queries a live Metasploit instance via RPC, extracts module documentation and metadata, uses a local Small Language Model (SLM) to extract structured application configurations, logs the metrics into a local database ledger, and generates high-fidelity **Lab Blueprint Manuals** and **Statistical Reports**.
 
 ---
 
@@ -30,7 +26,7 @@ Vulnprint is architected for absolute data privacy and air-gapped capability. **
 └───────────────┘                         └─────────────────┘
         │
         ├─────────────────────────────────────────┐
-        ▼ (Send Clean Description)                ▼ (Store Structured Analytics)
+        ▼ (Send Description & Docs)               ▼ (Store Comprehensive Ledger)
 ┌─────────────────┐                     ┌─────────────────┐
 │ Local SLM Server│                     │  SQLite Ledger  │
 │ (Ollama/LocalAI)│                     │  (lab_hub.db)   │
@@ -55,13 +51,13 @@ Vulnprint is architected for absolute data privacy and air-gapped capability. **
 
 ## 🚀 Key Features
 
-### 1. On-Demand Metasploit Querying
+### 1. On-Demand Metasploit Querying & Documentation Extraction
 
-Queries active memory modules inside Metasploit via RPC based on user-defined CLI criteria (e.g., targeting specific platforms or disclosure dates). It isolates and extracts only the relevant text blocks, discarding UI fluff to optimize AI token context windows.
+Queries active memory modules inside Metasploit via RPC based on user-defined CLI criteria (e.g., targeting specific platforms or disclosure dates). It extracts relevant metadata (rank, disclosure date, platform, CVE references) and automatically locates and retrieves the module's corresponding markdown documentation page (containing setup requirements and tested environments) from the Metasploit framework installation.
 
 ### 2. Structured LLM Inference (Native JSON Mode)
 
-Leverages local models using an OpenAI-compatible abstraction layer. It forces the local AI to operate in a strict `json_object` mode, ensuring clean, programmatically predictable output:
+Leverages local models using an OpenAI-compatible abstraction layer. It passes the raw exploit description and retrieved documentation to the local AI and forces it to operate in a strict `json_object` mode, ensuring clean, programmatically predictable output:
 
 ```json
 {
@@ -73,7 +69,7 @@ Leverages local models using an OpenAI-compatible abstraction layer. It forces t
 
 ### 3. Persistent Analytics Ledger
 
-Maintains a local SQLite database tracking historical inquiries, CVE maps, target versions, and configuration flags—making it a custom intelligence platform tailored to your specific testing goals.
+Maintains a local SQLite database tracking historical inquiries, CVE mappings, target platforms, ranks, disclosure dates, documentation, raw descriptions, and AI-extracted configuration flags—making it a custom intelligence platform tailored to your specific testing goals.
 
 ### 4. Interactive Dashboard & Blueprints
 
@@ -136,8 +132,7 @@ AI_MODEL=llama3
 Execute a targeted query against the framework engine:
 
 ```bash
-python -m vulnprint.main --search "type:exploit platform:linux date:2025"
-
+python src/main.py --search "type:exploit platform:linux date:2025"
 ```
 
 ### View Technology Analytics Dashboard
@@ -145,8 +140,7 @@ python -m vulnprint.main --search "type:exploit platform:linux date:2025"
 Display statistical distribution breakdowns from the SQLite ledger:
 
 ```bash
-python -m vulnprint.analytics --summary
-
+python src/main.py --analytics
 ```
 
 ### Access Your Lab Manuals
@@ -155,7 +149,6 @@ Check the generated manuals folder for your manual configuration layout guide:
 
 ```bash
 cat vulnprint_blueprints/CVE-2020-1938.md
-
 ```
 
 ---
