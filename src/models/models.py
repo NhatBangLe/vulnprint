@@ -25,6 +25,13 @@ class ExploitDetails(BaseModel):
 class MetasploitModuleDetails(BaseModel):
     description: str
     cves: List[str]
+    type: str = ""
+    name: str = ""
+    module_name: str = ""
+    rank: str = ""
+    disclosure_date: str = ""
+    platform: List[str] = Field(default_factory=list)
+    documentation: str = ""
 
 
 class VulnerabilityRecord(BaseModel):
@@ -34,3 +41,10 @@ class VulnerabilityRecord(BaseModel):
     vulnerable_versions: List[str]
     required_configs: List[str]
     raw_description: str
+    type: str = ""
+    name: str = ""
+    module_name: str = ""
+    rank: str = ""
+    disclosure_date: str = ""
+    platform: List[str] = Field(default_factory=list)
+    documentation: str = ""

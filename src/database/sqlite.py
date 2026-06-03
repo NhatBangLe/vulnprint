@@ -5,10 +5,10 @@ from typing import List, Optional, Tuple
 
 try:
     from src.database.base import VulnerabilityRepository
-    from src.models import ExploitDetails, VulnerabilityRecord
+    from src.models import ExploitDetails, VulnerabilityRecord, MetasploitModuleDetails
 except ImportError:
     from .base import VulnerabilityRepository
-    from models import ExploitDetails, VulnerabilityRecord
+    from models import ExploitDetails, VulnerabilityRecord, MetasploitModuleDetails
 
 
 class SQLiteVulnerabilityRepository(VulnerabilityRepository):
@@ -40,6 +40,13 @@ class SQLiteVulnerabilityRepository(VulnerabilityRepository):
                 vulnerable_versions TEXT,   -- Stored as a JSON-formatted array string
                 required_configs TEXT,      -- Stored as a JSON-formatted array string
                 raw_description TEXT,
+                type TEXT,
+                name TEXT,
+                module_name TEXT,
+                rank TEXT,
+                disclosure_date TEXT,
+                platform TEXT,              -- Stored as a JSON-formatted array string
+                documentation TEXT,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             );
             """
@@ -52,10 +59,8 @@ class SQLiteVulnerabilityRepository(VulnerabilityRepository):
 
     def store_vulnerability(
         self,
-        msf_path: str,
-        cves_list: List[str],
         data: ExploitDetails,
-        raw_description: str,
+        details: MetasploitModuleDetails,
     ) -> None:
         """
         Serializes Python arrays and performs an INSERT OR REPLACE to upsert target profiles.
@@ -66,11 +71,25 @@ class SQLiteVulnerabilityRepository(VulnerabilityRepository):
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
 
+            # Extract msf_path and cves_list from details
+            msf_path = details.module_name
+            cves_list = details.cves
+
             # Serialize list values to JSON strings
             cves_json = json.dumps(cves_list)
             vulnerable_versions_json = json.dumps(data.vulnerable_versions)
             required_configs_json = json.dumps(data.required_configs)
             software_name = data.software_name or "Unknown"
+
+            # Extract details fields
+            mtype = details.type
+            name = details.name
+            module_name = details.module_name
+            rank = details.rank
+            disclosure_date = details.disclosure_date
+            platform_json = json.dumps(details.platform)
+            documentation = details.documentation
+            raw_description = details.description
 
             # Execute UPSERT (INSERT OR REPLACE)
             cursor.execute(
@@ -81,8 +100,15 @@ class SQLiteVulnerabilityRepository(VulnerabilityRepository):
                 software_name, 
                 vulnerable_versions, 
                 required_configs, 
-                raw_description
-            ) VALUES (?, ?, ?, ?, ?, ?);
+                raw_description,
+                type,
+                name,
+                module_name,
+                rank,
+                disclosure_date,
+                platform,
+                documentation
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
             """,
                 (
                     msf_path,
@@ -91,6 +117,13 @@ class SQLiteVulnerabilityRepository(VulnerabilityRepository):
                     vulnerable_versions_json,
                     required_configs_json,
                     raw_description,
+                    mtype,
+                    name,
+                    module_name,
+                    rank,
+                    disclosure_date,
+                    platform_json,
+                    documentation,
                 ),
             )
 
@@ -114,7 +147,8 @@ class SQLiteVulnerabilityRepository(VulnerabilityRepository):
             cursor = conn.cursor()
             cursor.execute(
                 """
-                SELECT cves, software_name, vulnerable_versions, required_configs, raw_description 
+                SELECT cves, software_name, vulnerable_versions, required_configs, raw_description,
+                       type, name, module_name, rank, disclosure_date, platform, documentation
                 FROM vulnerabilities 
                 WHERE msf_path = ?
                 """,
@@ -124,7 +158,20 @@ class SQLiteVulnerabilityRepository(VulnerabilityRepository):
             if not row:
                 return None
 
-            raw_cves, software_name, raw_versions, raw_configs, raw_desc = row
+            (
+                raw_cves,
+                software_name,
+                raw_versions,
+                raw_configs,
+                raw_desc,
+                mtype,
+                name,
+                module_name,
+                rank,
+                disclosure_date,
+                raw_platform,
+                documentation,
+            ) = row
             return VulnerabilityRecord(
                 msf_path=msf_path,
                 cves=json.loads(raw_cves) if raw_cves else [],
@@ -132,6 +179,13 @@ class SQLiteVulnerabilityRepository(VulnerabilityRepository):
                 vulnerable_versions=json.loads(raw_versions) if raw_versions else [],
                 required_configs=json.loads(raw_configs) if raw_configs else [],
                 raw_description=raw_desc or "",
+                type=mtype or "",
+                name=name or "",
+                module_name=module_name or "",
+                rank=rank or "",
+                disclosure_date=disclosure_date or "",
+                platform=json.loads(raw_platform) if raw_platform else [],
+                documentation=documentation or "",
             )
         except Exception as e:
             self._logger.error(

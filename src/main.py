@@ -100,7 +100,7 @@ def main():
 
         logger.info(f"Connecting to Metasploit RPC Daemon at {msf_host}:{msf_port}...")
         metasploit_service = MetasploitRPCService(
-            host=msf_host, port=msf_port, password=msf_password
+            host=msf_host, port=msf_port, password=msf_password, ssl=True
         )
         try:
             metasploit_service.connect()
@@ -139,25 +139,21 @@ def main():
                     f"[{idx}/{len(module_paths)}] Module description is empty. Skipping model analysis."
                 )
                 slm_data = ExploitDetails(
-                    software_name="Unknown",
-                    vulnerable_versions=[],
-                    required_configs=[]
+                    software_name="Unknown", vulnerable_versions=[], required_configs=[]
                 )
             else:
                 logger.info(
                     f"[{idx}/{len(module_paths)}] Interrogating local SLM ({ai_model}) to extract software metadata..."
                 )
-                slm_data = extractor.extract_metadata(desc)
+                slm_data = extractor.extract_metadata(desc, details.documentation)
 
             # Persist analytics inside repository
             logger.info(
                 f"[{idx}/{len(module_paths)}] Recording intelligence in database ledger..."
             )
             repository.store_vulnerability(
-                msf_path=path,
-                cves_list=cves,
                 data=slm_data,
-                raw_description=desc,
+                details=details,
             )
 
             # Generate Markdown Lab Blueprint Manual
@@ -175,9 +171,6 @@ def main():
 
         logger.info(
             f"Ingestion Complete! Successfully processed and generated {success_count} manuals."
-        )
-        logger.info(
-            "Run 'python -m src.analytics --summary' to view your technology analytics dashboard."
         )
 
 

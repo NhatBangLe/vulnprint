@@ -12,7 +12,9 @@ class VulnerabilityMetadataExtractor(ABC):
     """
 
     @abstractmethod
-    def extract_metadata(self, description_text: str) -> ExploitDetails:
+    def extract_metadata(
+        self, description_text: str, documentation_text: str = ""
+    ) -> ExploitDetails:
         """
         Analyzes description text and extracts structured details (software name,
         vulnerable versions, required configurations).

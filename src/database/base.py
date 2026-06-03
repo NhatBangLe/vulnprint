@@ -2,9 +2,9 @@ from abc import ABC, abstractmethod
 from typing import List, Optional, Tuple
 
 try:
-    from src.models import ExploitDetails, VulnerabilityRecord
+    from src.models import ExploitDetails, VulnerabilityRecord, MetasploitModuleDetails
 except ImportError:
-    from models import ExploitDetails, VulnerabilityRecord
+    from models import ExploitDetails, VulnerabilityRecord, MetasploitModuleDetails
 
 
 class VulnerabilityRepository(ABC):
@@ -23,10 +23,8 @@ class VulnerabilityRepository(ABC):
     @abstractmethod
     def store_vulnerability(
         self,
-        msf_path: str,
-        cves_list: List[str],
         data: ExploitDetails,
-        raw_description: str,
+        details: MetasploitModuleDetails,
     ) -> None:
         """
         Stores or updates a vulnerability target profile.

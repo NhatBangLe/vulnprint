@@ -28,9 +28,11 @@ class LLMVulnerabilityMetadataExtractor(VulnerabilityMetadataExtractor):
         self.model_name = model_name
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def extract_metadata(self, description_text: str) -> ExploitDetails:
+    def extract_metadata(
+        self, description_text: str, documentation_text: str = ""
+    ) -> ExploitDetails:
         """
-        Leverages local SLM to parse exploit description text and returns validated metadata.
+        Leverages local SLM to parse exploit description and documentation text, returning validated metadata.
         """
         fallback_data = {
             "software_name": "Unknown",
@@ -38,7 +40,9 @@ class LLMVulnerabilityMetadataExtractor(VulnerabilityMetadataExtractor):
             "required_configs": [],
         }
 
-        if not description_text or not description_text.strip():
+        # Check if we have any input text
+        combined_text = (description_text or "") + (documentation_text or "")
+        if not combined_text.strip():
             return ExploitDetails.model_validate(fallback_data)
 
         try:
@@ -54,7 +58,9 @@ class LLMVulnerabilityMetadataExtractor(VulnerabilityMetadataExtractor):
                 "headers, markdown wrapping, or commentary."
             )
 
-            user_message = f"Exploit Text: {description_text}"
+            user_message = f"Exploit Description:\n{description_text}"
+            if documentation_text:
+                user_message += f"\n\nExploit Documentation:\n{documentation_text}"
 
             # Request completions from the local engine
             response = client.chat.completions.create(
