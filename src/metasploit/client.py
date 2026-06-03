@@ -102,7 +102,6 @@ class MetasploitRPCService(MetasploitService):
             # Load the module
             module_manager: ModuleManager = self.client.modules
             exploit: ExploitModule = module_manager.use("exploit", module_path)
-            self._logger.info(exploit.info)
 
             # Extract metadata properties
             mtype = getattr(exploit, "type", "exploit")

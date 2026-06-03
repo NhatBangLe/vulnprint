@@ -143,7 +143,7 @@ def main():
                 )
             else:
                 logger.info(
-                    f"[{idx}/{len(module_paths)}] Interrogating local SLM ({ai_model}) to extract software metadata..."
+                    f"[{idx}/{len(module_paths)}] Interrogating AI model ({ai_model}) to extract software metadata..."
                 )
                 slm_data = extractor.extract_metadata(desc, details.documentation)
 

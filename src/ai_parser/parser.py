@@ -1,4 +1,5 @@
 import json
+from pydantic import ValidationError
 import logging
 from openai import OpenAI
 
@@ -22,10 +23,12 @@ class LLMVulnerabilityMetadataExtractor(VulnerabilityMetadataExtractor):
         base_url: str = "http://localhost:11434/v1",
         api_key: str = "local-engine",
         model_name: str = "llama3",
+        temperature: float = 0.0,
     ):
         self.base_url = base_url
         self.api_key = api_key
         self.model_name = model_name
+        self.temperature = temperature
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def extract_metadata(
@@ -53,48 +56,52 @@ class LLMVulnerabilityMetadataExtractor(VulnerabilityMetadataExtractor):
                 "You are an expert open-source cyber threat intelligence parser. "
                 "Analyze the given exploit text block. Extract the primary software package target name, "
                 "its explicit vulnerable version identifiers, and specific environment rules. "
-                "You must reply strictly with a raw JSON object containing the keys 'software_name', "
-                "'vulnerable_versions', and 'required_configs'. Do not provide conversational text, "
-                "headers, markdown wrapping, or commentary."
             )
 
-            user_message = f"Exploit Description:\n{description_text}"
-            if documentation_text:
-                user_message += f"\n\nExploit Documentation:\n{documentation_text}"
+            user_message = (
+                "Here is the provided exploit information, analyze and extract the relevant information."
+                f"\nExploit Description:\n{description_text}"
+                f"\n\nExploit Documentation:\n{documentation_text}"
+            )
 
-            # Request completions from the local engine
-            response = client.chat.completions.create(
+            # Request completions with structured outputs
+            response = client.chat.completions.parse(
                 model=self.model_name,
                 messages=[
-                    {"role": "system", "content": system_message},
+                    {
+                        "role": "system",
+                        "content": (
+                            f"{system_message}"
+                            "Return ONLY a raw JSON object that matches this structure:"
+                            '{"software_name": "<string>", "vulnerable_versions": ["<string>", "<string>",..., "<string>"], "required_configs": ["<string>", "<string>",..., "<string>"]}'
+                            "Do NOT wrap the response in markdown code blocks like ```json ... ```. "
+                        ),
+                    },
                     {"role": "user", "content": user_message},
                 ],
-                response_format={"type": "json_object"},
-                temperature=0.0,
+                temperature=self.temperature,
+                response_format=ExploitDetails,
             )
 
-            raw_content = response.choices[0].message.content
-            if not raw_content:
-                raise ValueError("Empty response received from the local model.")
+            parsed_content = response.choices[0].message.parsed
+            if parsed_content is None:
+                self._logger.warning(
+                    "No parsed data received from the model. Return fallback data."
+                )
+                return ExploitDetails.model_validate(fallback_data)
+            return parsed_content
+        except ValidationError as e:
+            self._logger.error("Pydantic Validation Failed!")
 
-            # Strip potential markdown code fence markers (e.g. ```json ... ```)
-            cleaned_content = raw_content.strip()
-            if cleaned_content.startswith("```"):
-                # strip start line
-                lines = cleaned_content.splitlines()
-                if lines[0].startswith("```"):
-                    lines = lines[1:]
-                if lines and lines[-1].startswith("```"):
-                    lines = lines[:-1]
-                cleaned_content = "\n".join(lines).strip()
-
-            # Validate structure with Pydantic
-            return ExploitDetails.model_validate_json(cleaned_content)
-        except json.JSONDecodeError as jde:
-            self._logger.error(f"JSON parsing failed on model response: {jde}")
-            if "raw_content" in locals():
-                self._logger.error(f"Raw response was: {raw_content}")
+            # Loop through errors to see exactly what broke and what the text looked like
+            for error in e.errors():
+                self._logger.error(
+                    "Error Message: {msg}."
+                    "\nError Location: {loc}, "
+                    "Error Type: {type}, "
+                    "Input:\n{input}".format(**error)
+                )
             return ExploitDetails.model_validate(fallback_data)
         except Exception as e:
-            self._logger.error(f"Error during LLM analysis or Pydantic validation: {e}")
+            self._logger.error(f"Error during LLM analysis: {e}")
             return ExploitDetails.model_validate(fallback_data)
