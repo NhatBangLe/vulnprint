@@ -25,8 +25,34 @@ except ImportError:
 
 def parse_args() -> CLIArguments:
     parser = argparse.ArgumentParser(
-        description="Vulnprint - Vulnerability Intelligence & Lab Blueprint Engine"
+        description="Vulnprint - Vulnerability Intelligence & Lab Blueprint Engine",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+examples:
+  # Search Metasploit and build blueprints:
+  python src/main.py --search "apache tomcat"
+
+  # Show basic software vulnerability counts:
+  python src/main.py --summary
+
+  # Show detailed metrics (ranks, platforms, disclosure timeline, configuration flags):
+  python src/main.py --analytics
+
+  # List all unique software targets in the database:
+  python src/main.py --list-software
+
+  # Search local database with wildcards:
+  python src/main.py --search-db "apache*"
+
+  # Search with active platform/OS and exploit rank filters:
+  python src/main.py --search-db "apache*" --platform windows --rank excellent
+
+  # Export metrics or search results to a Markdown report:
+  python src/main.py --analytics --export reports/analytics.md
+  python src/main.py --search-db "*" --export reports/search_output.md
+""",
     )
+
 
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument(
