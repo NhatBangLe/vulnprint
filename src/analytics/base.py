@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from typing import Optional
 
 
 class AnalyticsService(ABC):
@@ -11,5 +12,32 @@ class AnalyticsService(ABC):
     def display_dashboard(self) -> None:
         """
         Displays the statistical analytics dashboard (e.g. CLI ASCII table).
+        """
+        pass
+
+    @abstractmethod
+    def display_analytics(self, export_path: Optional[str] = None) -> None:
+        """
+        Displays detailed statistical metrics dashboard panels.
+        """
+        pass
+
+    @abstractmethod
+    def display_software_list(self, export_path: Optional[str] = None) -> None:
+        """
+        Displays a list of all unique software targets.
+        """
+        pass
+
+    @abstractmethod
+    def display_search_results(
+        self,
+        software_pattern: str,
+        platform: Optional[str] = None,
+        rank: Optional[str] = None,
+        export_path: Optional[str] = None,
+    ) -> None:
+        """
+        Displays wildcard search results with optional platform and rank filters.
         """
         pass

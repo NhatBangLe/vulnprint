@@ -240,3 +240,222 @@ class SQLiteVulnerabilityRepository(VulnerabilityRepository):
         finally:
             if conn:
                 conn.close()
+
+    def get_all_software(self) -> List[str]:
+        """
+        Retrieves a sorted list of all unique software names stored in the database.
+        """
+        conn = None
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT DISTINCT software_name FROM vulnerabilities WHERE software_name IS NOT NULL ORDER BY software_name ASC;"
+            )
+            return [row[0] for row in cursor.fetchall() if row[0]]
+        except Exception as e:
+            self._logger.error(f"Error retrieving all software: {e}")
+            return []
+        finally:
+            if conn:
+                conn.close()
+
+    def search_vulnerabilities(
+        self,
+        software_pattern: Optional[str] = None,
+        platform: Optional[str] = None,
+        rank: Optional[str] = None,
+    ) -> List[VulnerabilityRecord]:
+        """
+        Searches vulnerabilities by software name pattern (supporting wildcards) and filters.
+        """
+        conn = None
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+
+            query = """
+                SELECT cves, software_name, vulnerable_versions, required_configs, raw_description,
+                       type, name, module_name, rank, disclosure_date, platform, documentation, msf_path
+                FROM vulnerabilities 
+                WHERE 1=1
+            """
+            params = []
+
+            if software_pattern:
+                sql_pattern = software_pattern.replace("*", "%")
+                query += " AND software_name LIKE ?"
+                params.append(sql_pattern)
+
+            if platform:
+                query += " AND platform LIKE ?"
+                params.append(f"%{platform}%")
+
+            if rank:
+                query += " AND rank LIKE ?"
+                params.append(f"%{rank}%")
+
+            query += " ORDER BY software_name ASC, rank DESC"
+
+            cursor.execute(query, tuple(params))
+            rows = cursor.fetchall()
+
+            records = []
+            for row in rows:
+                (
+                    raw_cves,
+                    software_name,
+                    raw_versions,
+                    raw_configs,
+                    raw_desc,
+                    mtype,
+                    name,
+                    module_name,
+                    l_rank,
+                    disclosure_date,
+                    raw_platform,
+                    documentation,
+                    msf_path,
+                ) = row
+
+                records.append(
+                    VulnerabilityRecord(
+                        msf_path=msf_path,
+                        cves=json.loads(raw_cves) if raw_cves else [],
+                        software_name=software_name,
+                        vulnerable_versions=(
+                            json.loads(raw_versions) if raw_versions else []
+                        ),
+                        required_configs=json.loads(raw_configs) if raw_configs else [],
+                        raw_description=raw_desc or "",
+                        type=mtype or "",
+                        name=name or "",
+                        module_name=module_name or "",
+                        rank=l_rank or "",
+                        disclosure_date=disclosure_date or "",
+                        platform=json.loads(raw_platform) if raw_platform else [],
+                        documentation=documentation or "",
+                    )
+                )
+            return records
+        except Exception as e:
+            self._logger.error(f"Error searching vulnerabilities: {e}")
+            return []
+        finally:
+            if conn:
+                conn.close()
+
+    def get_rank_distribution(self) -> List[Tuple[str, int]]:
+        """
+        Retrieves exploit reliability ranks and their counts.
+        """
+        conn = None
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT rank, COUNT(*) as cnt 
+                FROM vulnerabilities 
+                WHERE rank IS NOT NULL AND rank != '' 
+                GROUP BY rank 
+                ORDER BY cnt DESC;
+                """
+            )
+            return cursor.fetchall()
+        except Exception as e:
+            self._logger.error(f"Error querying rank distribution: {e}")
+            return []
+        finally:
+            if conn:
+                conn.close()
+
+    def get_platform_distribution(self) -> List[Tuple[str, int]]:
+        """
+        Retrieves platforms and their counts.
+        """
+        from collections import Counter
+
+        conn = None
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT platform FROM vulnerabilities WHERE platform IS NOT NULL;"
+            )
+            rows = cursor.fetchall()
+
+            counter = Counter()
+            for row in rows:
+                if row[0]:
+                    try:
+                        platforms = json.loads(row[0])
+                        if isinstance(platforms, list):
+                            for p in platforms:
+                                counter[p] += 1
+                        elif isinstance(platforms, str):
+                            counter[platforms] += 1
+                    except Exception:
+                        pass
+            return counter.most_common()
+        except Exception as e:
+            self._logger.error(f"Error querying platform distribution: {e}")
+            return []
+        finally:
+            if conn:
+                conn.close()
+
+    def get_disclosure_timeline(self) -> List[Tuple[str, int]]:
+        """
+        Retrieves vulnerability counts grouped by disclosure year.
+        """
+        conn = None
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT substr(disclosure_date, 1, 4) as year, COUNT(*) as cnt 
+                FROM vulnerabilities 
+                WHERE disclosure_date IS NOT NULL AND disclosure_date != '' 
+                GROUP BY year 
+                ORDER BY year DESC;
+                """
+            )
+            return cursor.fetchall()
+        except Exception as e:
+            self._logger.error(f"Error querying disclosure timeline: {e}")
+            return []
+        finally:
+            if conn:
+                conn.close()
+
+    def get_required_configurations(self) -> List[str]:
+        """
+        Retrieves all JSON strings of required configuration flags.
+        """
+        conn = None
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT required_configs FROM vulnerabilities WHERE required_configs IS NOT NULL;"
+            )
+            rows = cursor.fetchall()
+
+            all_configs = []
+            for row in rows:
+                if row[0]:
+                    try:
+                        configs = json.loads(row[0])
+                        if isinstance(configs, list):
+                            all_configs.extend(configs)
+                    except Exception:
+                        pass
+            return all_configs
+        except Exception as e:
+            self._logger.error(f"Error querying required configurations: {e}")
+            return []
+        finally:
+            if conn:
+                conn.close()

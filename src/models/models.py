@@ -6,6 +6,11 @@ class CLIArguments(BaseModel):
     search: Optional[str] = None
     analytics: bool = False
     summary: bool = False
+    list_software: bool = False
+    search_db: Optional[str] = None
+    platform: Optional[str] = None
+    rank: Optional[str] = None
+    export: Optional[str] = None
 
 
 class ExploitDetails(BaseModel):

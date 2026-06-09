@@ -37,12 +37,39 @@ def parse_args() -> CLIArguments:
     group.add_argument(
         "--analytics",
         action="store_true",
-        help="Generate ASCII metrics summary dashboard from database ledger",
+        help="Generate ASCII detailed metrics dashboard panels from database ledger",
     )
     group.add_argument(
         "--summary",
         action="store_true",
-        help="Generate ASCII metrics summary dashboard from database ledger",
+        help="Generate ASCII basic technology density metrics from database ledger",
+    )
+    group.add_argument(
+        "--list-software",
+        action="store_true",
+        help="List all unique target software names stored in the database",
+    )
+    group.add_argument(
+        "--search-db",
+        type=str,
+        help="Search the local vulnerability database with wildcard support",
+    )
+
+    # Optional filters and options
+    parser.add_argument(
+        "--platform",
+        type=str,
+        help="Filter database search by target platform/OS",
+    )
+    parser.add_argument(
+        "--rank",
+        type=str,
+        help="Filter database search by exploit reliability rank",
+    )
+    parser.add_argument(
+        "--export",
+        type=str,
+        help="Export the generated report/results to a Markdown file",
     )
 
     args = parser.parse_args()
@@ -50,6 +77,11 @@ def parse_args() -> CLIArguments:
         search=args.search,
         analytics=args.analytics,
         summary=args.summary,
+        list_software=args.list_software,
+        search_db=args.search_db,
+        platform=args.platform,
+        rank=args.rank,
+        export=args.export,
     )
 
 
@@ -72,8 +104,8 @@ def main():
     # CLI Argument Parsing Setup
     args = parse_args()
 
-    # 1. Option: Dashboard Analytics
-    if args.analytics or args.summary:
+    # 1. Option: Dashboard Analytics / Queries
+    if args.analytics or args.summary or args.list_software or args.search_db:
         if not os.path.exists(db_path):
             logger.warning(
                 "Database ledger does not exist. Please query Metasploit first to populate it."
@@ -82,7 +114,20 @@ def main():
 
         repository = SQLiteVulnerabilityRepository(db_path=db_path)
         analytics_service = CLIAnalyticsService(repository=repository)
-        analytics_service.display_dashboard()
+
+        if args.summary:
+            analytics_service.display_dashboard()
+        elif args.analytics:
+            analytics_service.display_analytics(export_path=args.export)
+        elif args.list_software:
+            analytics_service.display_software_list(export_path=args.export)
+        elif args.search_db:
+            analytics_service.display_search_results(
+                software_pattern=args.search_db,
+                platform=args.platform,
+                rank=args.rank,
+                export_path=args.export,
+            )
         return
 
     # 2. Option: Search & Build Blueprints
