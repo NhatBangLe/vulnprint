@@ -1,7 +1,7 @@
 try:
-    from src.models import ExploitDetails
+    from src.models import VulnerabilityTarget
 except ImportError:
-    from models import ExploitDetails
+    from models import VulnerabilityTarget
 from abc import ABC, abstractmethod
 
 
@@ -14,7 +14,7 @@ class VulnerabilityMetadataExtractor(ABC):
     @abstractmethod
     def extract_metadata(
         self, description_text: str, documentation_text: str = ""
-    ) -> ExploitDetails:
+    ) -> VulnerabilityTarget:
         """
         Analyzes description text and extracts structured details (software name,
         vulnerable versions, required configurations).

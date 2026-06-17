@@ -7,13 +7,8 @@ import time
 import logging
 from pymetasploit3.msfrpc import MsfRpcClient
 from typing import List
-
-try:
-    from src.metasploit.base import MetasploitService
-    from src.models import MetasploitModuleDetails
-except ImportError:
-    from .base import MetasploitService
-    from models import MetasploitModuleDetails
+from .base import MetasploitService
+from models import MetasploitModuleDetails
 
 
 class MetasploitRPCService(MetasploitService):

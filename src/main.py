@@ -2,25 +2,31 @@ import sys
 import argparse
 import os
 import logging
-
-try:
-    from src.models import CLIArguments, ExploitDetails
-    from src.metasploit import MetasploitRPCService
-    from src.ai_parser import LLMVulnerabilityMetadataExtractor
-    from src.database import SQLiteVulnerabilityRepository
-    from src.blueprint import MarkdownBlueprintService
-    from src.analytics import CLIAnalyticsService
-    from src.config import settings
-    from src.utils import configure_logging
-except ImportError:
-    from models import CLIArguments, ExploitDetails
-    from metasploit import MetasploitRPCService
-    from ai_parser import LLMVulnerabilityMetadataExtractor
-    from database import SQLiteVulnerabilityRepository
-    from blueprint import MarkdownBlueprintService
-    from analytics import CLIAnalyticsService
-    from config import settings
-    from utils import configure_logging
+from typing import Optional
+from models import (
+    CLIArguments,
+    VulnerabilityTarget,
+    MetasploitModuleDetails,
+)
+from services.metasploit import MetasploitRPCService
+from services.ai_parser import LLMVulnerabilityMetadataExtractor
+from repositories import (
+    SQLiteMSFModuleRepository,
+    SQLiteSoftwareMetadataRepository,
+    SQLiteVulnerabilityRepository,
+    SQLiteVMGuidelineRepository,
+    DatabaseManager,
+)
+from services import (
+    DefaultMSFModuleService,
+    DefaultVulnerabilityTargetService,
+    DefaultVMGuidelineService,
+)
+from search_agent import SearchAgent
+from services.blueprint import MarkdownBlueprintService
+from services.analytics import CLIAnalyticsService
+from config import settings
+from utils import configure_logging
 
 
 def parse_args() -> CLIArguments:
@@ -29,13 +35,19 @@ def parse_args() -> CLIArguments:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 examples:
-  # Search Metasploit and build blueprints:
-  python src/main.py --search "apache tomcat"
+  # Search Metasploit, run search agent and build blueprints (limit to 5):
+  python src/main.py --search "apache tomcat" --limit 5
+
+  # Interactively review all unverified VM guidelines in the database:
+  python src/main.py --review
+
+  # Export the VM guideline for a specific Metasploit path:
+  python src/main.py --export-guide "exploit/multi/http/tomcat_mgr_deploy" --export reports/tomcat_mgr.md
 
   # Show basic software vulnerability counts:
   python src/main.py --summary
 
-  # Show detailed metrics (ranks, platforms, disclosure timeline, configuration flags):
+  # Show detailed metrics:
   python src/main.py --analytics
 
   # List all unique software targets in the database:
@@ -43,16 +55,8 @@ examples:
 
   # Search local database with wildcards:
   python src/main.py --search-db "apache*"
-
-  # Search with active platform/OS and exploit rank filters:
-  python src/main.py --search-db "apache*" --platform windows --rank excellent
-
-  # Export metrics or search results to a Markdown report:
-  python src/main.py --analytics --export reports/analytics.md
-  python src/main.py --search-db "*" --export reports/search_output.md
 """,
     )
-
 
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument(
@@ -80,6 +84,16 @@ examples:
         type=str,
         help="Search the local vulnerability database with wildcard support",
     )
+    group.add_argument(
+        "--review",
+        action="store_true",
+        help="Interactively review all UNVERIFIED VM guidelines in the database",
+    )
+    group.add_argument(
+        "--export-guide",
+        type=str,
+        help="Export the saved VM guideline for a specific Metasploit path",
+    )
 
     # Optional filters and options
     parser.add_argument(
@@ -95,7 +109,12 @@ examples:
     parser.add_argument(
         "--export",
         type=str,
-        help="Export the generated report/results to a Markdown file",
+        help="Export the generated report/results/guidelines to a Markdown file",
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        help="Limit the number of Metasploit modules processed during ingestion",
     )
 
     args = parser.parse_args()
@@ -108,6 +127,343 @@ examples:
         platform=args.platform,
         rank=args.rank,
         export=args.export,
+        limit=args.limit,
+        review=args.review,
+        export_guide=args.export_guide,
+    )
+
+
+def setup_database_and_services(db_path: str, search_agent=None):
+    # Initialize database schema using DatabaseManager
+    db_manager = DatabaseManager(db_path=db_path)
+    db_manager.initialize_schema()
+
+    # Instantiate repositories
+    msf_repo = SQLiteMSFModuleRepository(db_path=db_path)
+    software_repo = SQLiteSoftwareMetadataRepository(db_path=db_path)
+    vuln_repo = SQLiteVulnerabilityRepository(db_path=db_path)
+    guide_repo = SQLiteVMGuidelineRepository(db_path=db_path)
+
+    # Wrap repositories in Domain Services
+    msf_service = DefaultMSFModuleService(msf_repo=msf_repo, vuln_repo=vuln_repo)
+    vuln_service = DefaultVulnerabilityTargetService(
+        software_repo=software_repo, vuln_repo=vuln_repo
+    )
+    guide_service = DefaultVMGuidelineService(
+        guide_repo=guide_repo, search_agent=search_agent
+    )
+
+    return msf_service, vuln_service, guide_service
+
+
+def handle_review_mode(
+    guide_service, vuln_service, msf_service, logger: logging.Logger
+) -> None:
+    unverified_guidelines = guide_service.get_unverified_guidelines()
+    if not unverified_guidelines:
+        logger.info("No unverified VM guidelines found in the database.")
+        return
+
+    logger.info(
+        f"Found {len(unverified_guidelines)} unverified VM guidelines to review."
+    )
+    for idx, guide_domain in enumerate(unverified_guidelines, 1):
+        path = guide_domain.path
+        guideline = guide_domain.guideline
+
+        # Map associated info for display using services and domain models
+        vuln_target = vuln_service.get_vulnerability_target(path)
+        software_name = vuln_target.software_name if vuln_target else "Unknown"
+
+        msf_details = msf_service.get_module_details(path)
+        cves = (
+            ", ".join(msf_details.cves) if msf_details and msf_details.cves else "None"
+        )
+
+        print(f"\n==================================================")
+        print(f"[{idx}/{len(unverified_guidelines)}] Reviewing guideline for: {path}")
+        print(f"Target Software: {software_name}")
+        print(f"Associated CVEs: {cves}")
+        print(f"--------------------------------------------------")
+        print(guideline)
+        print(f"--------------------------------------------------")
+
+        while True:
+            choice = (
+                input(
+                    "Select Action: [1] Approve, [2] Modify, [3] Reject, [4] Skip, [q] Quit: "
+                )
+                .strip()
+                .lower()
+            )
+            if choice in ["1", "approve", "a"]:
+                guide_service.update_guideline_status(path, "VERIFIED")
+                logger.info(f"Approved and marked guideline for {path} as VERIFIED.")
+                break
+            elif choice in ["2", "modify", "m"]:
+                # Write guideline to a temp file
+                root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                temp_dir = os.path.join(root_dir, "scratch")
+                os.makedirs(temp_dir, exist_ok=True)
+                temp_file = os.path.join(
+                    temp_dir,
+                    f"temp_guideline_{path.replace('/', '_').replace('\\', '_')}.md",
+                )
+
+                with open(temp_file, "w", encoding="utf-8") as tf:
+                    tf.write(guideline)
+
+                logger.info(
+                    f"Opening notepad to modify guideline. Please edit, save, and close the file."
+                )
+                # Open notepad on Windows, fallback to standard subprocess or terminal wait
+                try:
+                    import subprocess
+
+                    subprocess.run(["notepad.exe", temp_file], check=True)
+                except Exception as editor_err:
+                    logger.warning(
+                        f"Failed to launch notepad.exe: {editor_err}. Please manually edit the temp file: {temp_file}"
+                    )
+                    input("Press Enter once you have edited and saved the file...")
+
+                # Read back modified content
+                if os.path.exists(temp_file):
+                    with open(temp_file, "r", encoding="utf-8") as tf:
+                        modified_guideline = tf.read()
+
+                    guide_service.update_guideline_status(
+                        path, "VERIFIED", modified_guideline
+                    )
+                    logger.info(
+                        f"Marked guideline for {path} as VERIFIED with your modifications."
+                    )
+                    try:
+                        os.remove(temp_file)
+                    except Exception:
+                        pass
+                else:
+                    logger.error("Temporary file not found. Skipping modification.")
+                break
+            elif choice in ["3", "reject", "r"]:
+                guide_service.update_guideline_status(path, "REJECTED")
+                logger.info(f"Marked guideline for {path} as REJECTED.")
+                break
+            elif choice in ["4", "skip", "s"]:
+                logger.info("Skipped.")
+                break
+            elif choice in ["q", "quit"]:
+                logger.info("Exiting review loop.")
+                return
+            else:
+                print("Invalid choice. Please select 1, 2, 3, 4, or q.")
+
+
+def handle_export_guide_mode(
+    guide_service,
+    export_guide_path: str,
+    export_file_path: Optional[str],
+    logger: logging.Logger,
+) -> None:
+    guide_domain = guide_service.get_vm_guideline(export_guide_path)
+    if not guide_domain:
+        logger.error(f"No VM guideline found for Metasploit path: {export_guide_path}")
+        return
+
+    output_text = (
+        f"# VM Installation Guideline for: {guide_domain.path}\n"
+        f"Verification Status: {guide_domain.status}\n\n"
+        f"{guide_domain.guideline}\n"
+    )
+
+    if export_file_path:
+        try:
+            export_dir = os.path.dirname(export_file_path)
+            if export_dir and not os.path.exists(export_dir):
+                os.makedirs(export_dir, exist_ok=True)
+            with open(export_file_path, "w", encoding="utf-8") as ef:
+                ef.write(output_text)
+            logger.info(f"Successfully exported VM guideline to: {export_file_path}")
+        except Exception as e:
+            logger.error(f"Error exporting VM guideline to {export_file_path}: {e}")
+    else:
+        print("\n--------------------------------------------------")
+        print(output_text)
+        print("--------------------------------------------------")
+
+
+def handle_analytics_mode(
+    args: CLIArguments, msf_service, vuln_service, guide_service
+) -> None:
+    analytics_service = CLIAnalyticsService(
+        msf_service=msf_service,
+        vuln_service=vuln_service,
+        guide_service=guide_service,
+    )
+    if args.summary:
+        analytics_service.display_dashboard()
+    elif args.analytics:
+        analytics_service.display_analytics(export_path=args.export)
+    elif args.list_software:
+        analytics_service.display_software_list(export_path=args.export)
+    elif args.search_db:
+        analytics_service.display_search_results(
+            software_pattern=args.search_db,
+            platform=args.platform,
+            rank=args.rank,
+            export_path=args.export,
+        )
+
+
+def handle_search_ingestion(
+    args: CLIArguments,
+    db_path: str,
+    logger: logging.Logger,
+    msf_host: str,
+    msf_port: str,
+    msf_password: str,
+    ai_base_url: str,
+    ai_api_key: str,
+    ai_model: str,
+    blueprints_dir: str,
+) -> None:
+    if not msf_password:
+        logger.error(
+            "Critical Error: MSF_RPC_PASSWORD environment variable is not defined. "
+            "Please create a .env file containing the secure Metasploit RPC password."
+        )
+        sys.exit(1)
+
+    # Instantiate repositories
+    msf_repo = SQLiteMSFModuleRepository(db_path=db_path)
+    software_repo = SQLiteSoftwareMetadataRepository(db_path=db_path)
+    vuln_repo = SQLiteVulnerabilityRepository(db_path=db_path)
+    guide_repo = SQLiteVMGuidelineRepository(db_path=db_path)
+
+    logger.info(f"Initializing local database split repository tables at {db_path}...")
+    db_manager = DatabaseManager(db_path=db_path)
+    db_manager.initialize_schema()
+
+    # Wrap repositories in Domain Services
+    msf_service = DefaultMSFModuleService(msf_repo=msf_repo, vuln_repo=vuln_repo)
+    vuln_service = DefaultVulnerabilityTargetService(
+        software_repo=software_repo, vuln_repo=vuln_repo
+    )
+
+    logger.info(f"Connecting to Metasploit RPC Daemon at {msf_host}:{msf_port}...")
+    metasploit_service = MetasploitRPCService(
+        host=msf_host, port=msf_port, password=msf_password, ssl=True
+    )
+    try:
+        metasploit_service.connect()
+    except Exception:
+        sys.exit(1)
+
+    extractor = LLMVulnerabilityMetadataExtractor(
+        base_url=ai_base_url, api_key=ai_api_key, model_name=ai_model
+    )
+
+    # Initialize search agent
+    search_agent = SearchAgent(
+        msf_service=msf_service,
+        vuln_service=vuln_service,
+        mcp_url=settings.mcp_search_url,
+        ai_base_url=ai_base_url,
+        ai_api_key=ai_api_key,
+        ai_model=ai_model,
+        max_tool_calls=settings.mcp_max_tool_calls,
+    )
+
+    # Initialize guide service with search agent
+    guide_service = DefaultVMGuidelineService(
+        guide_repo=guide_repo, search_agent=search_agent
+    )
+
+    # Initialize blueprint service
+    blueprint_service = MarkdownBlueprintService(
+        msf_service=msf_service,
+        vuln_service=vuln_service,
+        output_dir=blueprints_dir,
+        guide_service=guide_service,
+    )
+
+    logger.info(f"Executing search query: '{args.search}'")
+    module_paths = metasploit_service.search_modules(args.search)
+
+    if not module_paths:
+        logger.warning(
+            "No exploit modules matched the search query or buffer read failed."
+        )
+        return
+
+    logger.info(f"Found {len(module_paths)} matching exploit modules.")
+
+    # Apply module cap limit
+    if args.limit and args.limit > 0:
+        logger.info(
+            f"Limiting Metasploit module processing to the top {args.limit} results."
+        )
+        module_paths = module_paths[: args.limit]
+
+    success_count = 0
+    for idx, path in enumerate(module_paths, 1):
+        logger.info(f"[{idx}/{len(module_paths)}] Processing: {path}")
+
+        # Fetch module details from Metasploit
+        details = metasploit_service.get_module_details(path)
+        desc = details.description
+        cves = details.cves
+
+        if not desc:
+            logger.warning(
+                f"[{idx}/{len(module_paths)}] Module description is empty. Skipping model analysis."
+            )
+            slm_data = VulnerabilityTarget(
+                software_name="Unknown", vulnerable_versions=[], required_configs=[]
+            )
+        else:
+            logger.info(
+                f"[{idx}/{len(module_paths)}] Interrogating AI model ({ai_model}) to extract software metadata..."
+            )
+            slm_data = extractor.extract_metadata(desc, details.documentation)
+
+        # Persist analytics in separate services using Domain Model structures
+        logger.info(
+            f"[{idx}/{len(module_paths)}] Recording intelligence in database ledger..."
+        )
+
+        # 1. Save MetasploitModuleDetails via msf_service
+        msf_details = MetasploitModuleDetails(
+            description=details.description,
+            cves=details.cves,
+            type=details.type,
+            name=details.name,
+            module_name=details.module_name,
+            rank=details.rank,
+            disclosure_date=details.disclosure_date,
+            platform=details.platform,
+            documentation=details.documentation,
+        )
+        msf_service.store_module_details(msf_details)
+
+        # 2. Save VulnerabilityTarget via vuln_service
+        vuln_service.store_vulnerability_target(path, slm_data)
+
+        # Generate Markdown Lab Blueprint Manual
+        blueprint_file = blueprint_service.generate_blueprint(path)
+
+        if blueprint_file:
+            logger.info(
+                f"[{idx}/{len(module_paths)}] Saved Lab Blueprint Manual to: {blueprint_file}"
+            )
+            success_count += 1
+        else:
+            logger.error(
+                f"[{idx}/{len(module_paths)}] Failed to generate blueprint manual."
+            )
+
+    logger.info(
+        f"Ingestion Complete! Successfully processed and generated {success_count} manuals."
     )
 
 
@@ -116,132 +472,47 @@ def main():
     configure_logging(settings.log_level)
     logger = logging.getLogger("main")
 
-    msf_host = settings.msf_rpc_host
-    msf_port = settings.msf_rpc_port
-    msf_password = settings.msf_rpc_password
-
-    ai_base_url = settings.ai_base_url
-    ai_model = settings.ai_model
-    ai_api_key = settings.ai_api_key
-
-    blueprints_dir = settings.blueprints_dir
-    db_path = settings.database_path
-
     # CLI Argument Parsing Setup
     args = parse_args()
 
-    # 1. Option: Dashboard Analytics / Queries
-    if args.analytics or args.summary or args.list_software or args.search_db:
-        if not os.path.exists(db_path):
-            logger.warning(
-                "Database ledger does not exist. Please query Metasploit first to populate it."
-            )
-            return
-
-        repository = SQLiteVulnerabilityRepository(db_path=db_path)
-        analytics_service = CLIAnalyticsService(repository=repository)
-
-        if args.summary:
-            analytics_service.display_dashboard()
-        elif args.analytics:
-            analytics_service.display_analytics(export_path=args.export)
-        elif args.list_software:
-            analytics_service.display_software_list(export_path=args.export)
-        elif args.search_db:
-            analytics_service.display_search_results(
-                software_pattern=args.search_db,
-                platform=args.platform,
-                rank=args.rank,
-                export_path=args.export,
-            )
-        return
-
-    # 2. Option: Search & Build Blueprints
-    if args.search:
-        if not msf_password:
-            logger.error(
-                "Critical Error: MSF_RPC_PASSWORD environment variable is not defined. "
-                "Please create a .env file containing the secure Metasploit RPC password."
-            )
-            sys.exit(1)
-
-        repository = SQLiteVulnerabilityRepository(db_path=db_path)
-        logger.info(f"Initializing local database ledger: {db_path}")
-        repository.initialize()
-
-        logger.info(f"Connecting to Metasploit RPC Daemon at {msf_host}:{msf_port}...")
-        metasploit_service = MetasploitRPCService(
-            host=msf_host, port=msf_port, password=msf_password, ssl=True
-        )
-        try:
-            metasploit_service.connect()
-        except Exception:
-            sys.exit(1)
-
-        extractor = LLMVulnerabilityMetadataExtractor(
-            base_url=ai_base_url, api_key=ai_api_key, model_name=ai_model
-        )
-        blueprint_service = MarkdownBlueprintService(
-            repository=repository, output_dir=blueprints_dir
+    # Route based on command/mode
+    if (
+        args.analytics
+        or args.summary
+        or args.list_software
+        or args.search_db
+        or args.review
+        or args.export_guide
+    ):
+        msf_service, vuln_service, guide_service = setup_database_and_services(
+            db_path=settings.database_path,
+            search_agent=None,
         )
 
-        logger.info(f"Executing search query: '{args.search}'")
-        module_paths = metasploit_service.search_modules(args.search)
-
-        if not module_paths:
-            logger.warning(
-                "No exploit modules matched the search query or buffer read failed."
+        if args.review:
+            handle_review_mode(guide_service, vuln_service, msf_service, logger)
+        elif args.export_guide:
+            handle_export_guide_mode(
+                guide_service=guide_service,
+                export_guide_path=args.export_guide,
+                export_file_path=args.export,
+                logger=logger,
             )
-            return
+        else:
+            handle_analytics_mode(args, msf_service, vuln_service, guide_service)
 
-        logger.info(f"Found {len(module_paths)} matching exploit modules.")
-
-        success_count = 0
-        for idx, path in enumerate(module_paths, 1):
-            logger.info(f"[{idx}/{len(module_paths)}] Processing: {path}")
-
-            # Fetch module details from Metasploit
-            details = metasploit_service.get_module_details(path)
-            desc = details.description
-            cves = details.cves
-
-            if not desc:
-                logger.warning(
-                    f"[{idx}/{len(module_paths)}] Module description is empty. Skipping model analysis."
-                )
-                slm_data = ExploitDetails(
-                    software_name="Unknown", vulnerable_versions=[], required_configs=[]
-                )
-            else:
-                logger.info(
-                    f"[{idx}/{len(module_paths)}] Interrogating AI model ({ai_model}) to extract software metadata..."
-                )
-                slm_data = extractor.extract_metadata(desc, details.documentation)
-
-            # Persist analytics inside repository
-            logger.info(
-                f"[{idx}/{len(module_paths)}] Recording intelligence in database ledger..."
-            )
-            repository.store_vulnerability(
-                data=slm_data,
-                details=details,
-            )
-
-            # Generate Markdown Lab Blueprint Manual
-            blueprint_file = blueprint_service.generate_blueprint(path)
-
-            if blueprint_file:
-                logger.info(
-                    f"[{idx}/{len(module_paths)}] Saved Lab Blueprint Manual to: {blueprint_file}"
-                )
-                success_count += 1
-            else:
-                logger.error(
-                    f"[{idx}/{len(module_paths)}] Failed to generate blueprint manual."
-                )
-
-        logger.info(
-            f"Ingestion Complete! Successfully processed and generated {success_count} manuals."
+    elif args.search:
+        handle_search_ingestion(
+            args=args,
+            db_path=settings.database_path,
+            logger=logger,
+            msf_host=settings.msf_rpc_host,
+            msf_port=settings.msf_rpc_port,
+            msf_password=settings.msf_rpc_password,
+            ai_base_url=settings.ai_base_url,
+            ai_api_key=settings.ai_api_key,
+            ai_model=settings.ai_model,
+            blueprints_dir=settings.blueprints_dir,
         )
 
 

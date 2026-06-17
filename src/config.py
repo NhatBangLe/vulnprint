@@ -26,6 +26,11 @@ class Settings(BaseSettings):
     database_path: str = Field("lab_hub.db", validation_alias="DATABASE_PATH")
     log_level: str = Field("INFO", validation_alias="LOG_LEVEL")
 
+    mcp_search_url: str = Field(
+        "http://localhost:8000/mcp", validation_alias="MCP_SEARCH_URL"
+    )
+    mcp_max_tool_calls: int = Field(5, validation_alias="MCP_MAX_TOOL_CALLS")
+
     model_config = SettingsConfigDict(
         env_file=ENV_FILE_PATH, env_file_encoding="utf-8", extra="ignore"
     )

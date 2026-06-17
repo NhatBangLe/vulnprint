@@ -1,14 +1,8 @@
-try:
-    from src.models.models import (
-        CLIArguments,
-        ExploitDetails,
-        MetasploitModuleDetails,
-        VulnerabilityRecord,
-    )
-except ImportError:
-    from .models import (
-        CLIArguments,
-        ExploitDetails,
-        MetasploitModuleDetails,
-        VulnerabilityRecord,
-    )
+from .cli import CLIArguments
+from .domain import MetasploitModuleDetails, VulnerabilityTarget, VMGuideline
+from .records import (
+    MSFModuleRecord,
+    SoftwareMetadataRecord,
+    VulnerabilityRecord,
+    VMGuidelineRecord,
+)

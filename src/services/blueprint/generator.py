@@ -2,13 +2,9 @@ import os
 import logging
 import json
 from typing import Optional
-
-try:
-    from src.blueprint.base import BlueprintService
-    from src.database import VulnerabilityRepository
-except ImportError:
-    from .base import BlueprintService
-    from database import VulnerabilityRepository
+from .base import BlueprintService
+from services import MSFModuleService, VulnerabilityTargetService, VMGuidelineService
+from models import VulnerabilityTarget
 
 
 class MarkdownBlueprintService(BlueprintService):
@@ -18,31 +14,37 @@ class MarkdownBlueprintService(BlueprintService):
 
     def __init__(
         self,
-        repository: VulnerabilityRepository,
+        msf_service: MSFModuleService,
+        vuln_service: VulnerabilityTargetService,
+        guide_service: VMGuidelineService,
         output_dir: str = "vulnprint_blueprints/",
     ):
-        self.repository = repository
+        self.msf_service = msf_service
+        self.vuln_service = vuln_service
         self.output_dir = output_dir
+        self.guide_service = guide_service
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def generate_blueprint(self, msf_path: str) -> Optional[str]:
         """
-        Reads a database entry from the VulnerabilityRepository and generates a beautiful,
+        Reads database DTO records, maps them to domain models, and generates a beautiful,
         standardized Markdown blueprint manual.
         """
         try:
-            # Query the repository
-            vuln = self.repository.get_vulnerability(msf_path)
-            if not vuln:
-                self._logger.error(
-                    f"Module path '{msf_path}' not found in database repository."
-                )
+            # Query services for domain models
+            msf_details = self.msf_service.get_module_details(msf_path)
+            if not msf_details:
+                self._logger.error(f"Module path '{msf_path}' not found.")
                 return None
 
-            cves = vuln.cves
-            software_name = vuln.software_name
-            vulnerable_versions = vuln.vulnerable_versions
-            required_configs = vuln.required_configs
+            vuln_target = self.vuln_service.get_vulnerability_target(msf_path)
+            if not vuln_target:
+                vuln_target = VulnerabilityTarget(software_name="Unknown")
+
+            cves = msf_details.cves
+            software_name = vuln_target.software_name
+            vulnerable_versions = vuln_target.vulnerable_versions
+            required_configs = vuln_target.required_configs
 
             # Format strings for insertion into template
             cves_str = ", ".join(cves) if cves else "N/A"
@@ -60,6 +62,31 @@ class MarkdownBlueprintService(BlueprintService):
             else:
                 configs_str = "1. No special pre-requisite configurations identified."
 
+            # Retrieve custom VM guideline from VM Guideline Service if enabled
+            vm_guideline = None
+            try:
+                self._logger.info(
+                    f"Querying VM guideline service for VM Installation Guideline for {msf_path}"
+                )
+                guideline_obj = self.guide_service.get_vm_guideline(msf_path)
+                if guideline_obj:
+                    vm_guideline = guideline_obj.guideline
+            except Exception as ex:
+                self._logger.error(
+                    f"Failed to get VM guideline from VM Guideline Service: {ex}"
+                )
+
+            if vm_guideline:
+                setup_instructions = vm_guideline
+            else:
+                # Default fallback instructions
+                setup_instructions = (
+                    "1. Download the specific legacy target executable or system binary package matching the versions identified above directly from standard open historical software archives.\n"
+                    "2. Initialize a local, network-isolated virtual machine or manual container image environment.\n"
+                    '3. Apply the environment parameters specified within the "Configuration Rules" section above.\n'
+                    "4. Verify local port binding allocations using standard troubleshooting utilities (`netstat`, `ss`, or `lsof`)."
+                )
+
             # Build the exact template layout required
             template = f"""# 📄 Lab Blueprint Manual: {software_name}
 
@@ -75,10 +102,7 @@ class MarkdownBlueprintService(BlueprintService):
 
 ## 🛠️ Manual Lab Setup Instructions
 
-1. Download the specific legacy target executable or system binary package matching the versions identified above directly from standard open historical software archives.
-2. Initialize a local, network-isolated virtual machine or manual container image environment.
-3. Apply the environment parameters specified within the "Configuration Rules" section above.
-4. Verify local port binding allocations using standard troubleshooting utilities (`netstat`, `ss`, or `lsof`).
+{setup_instructions}
 
 ## ⚔️ Verification & Exploitation Testing Lifecycle
 

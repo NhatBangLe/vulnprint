@@ -1,15 +1,8 @@
-import json
 from pydantic import ValidationError
 import logging
-from openai import OpenAI
-
-
-try:
-    from src.models import ExploitDetails
-    from src.ai_parser.base import VulnerabilityMetadataExtractor
-except ImportError:
-    from models import ExploitDetails
-    from .base import VulnerabilityMetadataExtractor
+from langchain_openai import ChatOpenAI
+from models import VulnerabilityTarget
+from .base import VulnerabilityMetadataExtractor
 
 
 class LLMVulnerabilityMetadataExtractor(VulnerabilityMetadataExtractor):
@@ -29,11 +22,17 @@ class LLMVulnerabilityMetadataExtractor(VulnerabilityMetadataExtractor):
         self.api_key = api_key
         self.model_name = model_name
         self.temperature = temperature
+        self.model = ChatOpenAI(
+            base_url=self.base_url,
+            api_key=self.api_key,
+            model=self.model_name,
+            temperature=self.temperature,
+        )
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def extract_metadata(
         self, description_text: str, documentation_text: str = ""
-    ) -> ExploitDetails:
+    ) -> VulnerabilityTarget:
         """
         Leverages local SLM to parse exploit description and documentation text, returning validated metadata.
         """
@@ -46,12 +45,9 @@ class LLMVulnerabilityMetadataExtractor(VulnerabilityMetadataExtractor):
         # Check if we have any input text
         combined_text = (description_text or "") + (documentation_text or "")
         if not combined_text.strip():
-            return ExploitDetails.model_validate(fallback_data)
+            return VulnerabilityTarget.model_validate(fallback_data)
 
         try:
-            # Instantiate client pointing to local server instance
-            client = OpenAI(base_url=self.base_url, api_key=self.api_key)
-
             system_message = (
                 "You are an expert open-source cyber threat intelligence parser. "
                 "Analyze the given exploit text block. Extract the primary software package target name, "
@@ -64,31 +60,19 @@ class LLMVulnerabilityMetadataExtractor(VulnerabilityMetadataExtractor):
                 f"\n\nExploit Documentation:\n{documentation_text}"
             )
 
-            # Request completions with structured outputs
-            response = client.chat.completions.parse(
-                model=self.model_name,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": (
-                            f"{system_message}"
-                            "Return ONLY a raw JSON object that matches this structure:"
-                            '{"software_name": "<string>", "vulnerable_versions": ["<string>", "<string>",..., "<string>"], "required_configs": ["<string>", "<string>",..., "<string>"]}'
-                            "Do NOT wrap the response in markdown code blocks like ```json ... ```. "
-                        ),
-                    },
+            structured_llm = self.model.with_structured_output(VulnerabilityTarget)
+            parsed_content = structured_llm.invoke(
+                [
+                    {"role": "system", "content": system_message},
                     {"role": "user", "content": user_message},
-                ],
-                temperature=self.temperature,
-                response_format=ExploitDetails,
+                ]
             )
 
-            parsed_content = response.choices[0].message.parsed
             if parsed_content is None:
                 self._logger.warning(
                     "No parsed data received from the model. Return fallback data."
                 )
-                return ExploitDetails.model_validate(fallback_data)
+                return VulnerabilityTarget.model_validate(fallback_data)
             return parsed_content
         except ValidationError as e:
             self._logger.error("Pydantic Validation Failed!")
@@ -101,7 +85,7 @@ class LLMVulnerabilityMetadataExtractor(VulnerabilityMetadataExtractor):
                     "Error Type: {type}, "
                     "Input:\n{input}".format(**error)
                 )
-            return ExploitDetails.model_validate(fallback_data)
+            return VulnerabilityTarget.model_validate(fallback_data)
         except Exception as e:
             self._logger.error(f"Error during LLM analysis: {e}")
-            return ExploitDetails.model_validate(fallback_data)
+            return VulnerabilityTarget.model_validate(fallback_data)
