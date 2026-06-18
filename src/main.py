@@ -1,3 +1,6 @@
+import asyncio
+from langchain_core.tools import BaseTool
+from langchain_mcp_adapters.client import MultiServerMCPClient
 import sys
 import argparse
 import os
@@ -9,7 +12,6 @@ from models import (
     MetasploitModuleDetails,
 )
 from services.metasploit import MetasploitRPCService
-from services.ai_parser import LLMVulnerabilityMetadataExtractor
 from repositories import (
     SQLiteMSFModuleRepository,
     SQLiteSoftwareMetadataRepository,
@@ -22,7 +24,7 @@ from services import (
     DefaultVulnerabilityTargetService,
     DefaultVMGuidelineService,
 )
-from search_agent import SearchAgent
+from agents import VulnerabilityTargetExtractorAgent, SearchAgent
 from services.blueprint import MarkdownBlueprintService
 from services.analytics import CLIAnalyticsService
 from config import settings
@@ -259,6 +261,19 @@ def handle_review_mode(
                 print("Invalid choice. Please select 1, 2, 3, 4, or q.")
 
 
+def list_mcp_tools(mcp_url: str) -> list[BaseTool]:
+    mcp_client = MultiServerMCPClient(
+        {
+            "mcp_search": {
+                "transport": "http",
+                "url": mcp_url,
+            }
+        }
+    )
+    tools = asyncio.run(mcp_client.get_tools())
+    return tools
+
+
 def handle_export_guide_mode(
     guide_service,
     export_guide_path: str,
@@ -359,18 +374,20 @@ def handle_search_ingestion(
     except Exception:
         sys.exit(1)
 
-    extractor = LLMVulnerabilityMetadataExtractor(
-        base_url=ai_base_url, api_key=ai_api_key, model_name=ai_model
+    tools = list_mcp_tools(settings.mcp_search_url)
+
+    extractor = VulnerabilityTargetExtractorAgent(
+        tools=tools, ai_base_url=ai_base_url, ai_api_key=ai_api_key, ai_model=ai_model
     )
 
     # Initialize search agent
     search_agent = SearchAgent(
         msf_service=msf_service,
         vuln_service=vuln_service,
-        mcp_url=settings.mcp_search_url,
         ai_base_url=ai_base_url,
         ai_api_key=ai_api_key,
         ai_model=ai_model,
+        tools=tools,
         max_tool_calls=settings.mcp_max_tool_calls,
     )
 
@@ -417,38 +434,31 @@ def handle_search_ingestion(
             logger.warning(
                 f"[{idx}/{len(module_paths)}] Module description is empty. Skipping model analysis."
             )
-            slm_data = VulnerabilityTarget(
-                software_name="Unknown", vulnerable_versions=[], required_configs=[]
-            )
         else:
             logger.info(
                 f"[{idx}/{len(module_paths)}] Interrogating AI model ({ai_model}) to extract software metadata..."
             )
-            slm_data = extractor.extract_metadata(desc, details.documentation)
+            slm_data = extractor.extract(
+                description=desc, documentation=details.documentation
+            )
+
+            if slm_data is None:
+                logger.warning(
+                    f"[{idx}/{len(module_paths)}] Failed to extract software metadata. Skipping..."
+                )
+                continue
 
         logger.info(
             f"[{idx}/{len(module_paths)}] Recording intelligence in database ledger..."
         )
         # Save MetasploitModuleDetails
-        msf_details = MetasploitModuleDetails(
-            description=details.description,
-            cves=details.cves,
-            type=details.type,
-            name=details.name,
-            module_name=details.module_name,
-            rank=details.rank,
-            disclosure_date=details.disclosure_date,
-            platform=details.platform,
-            documentation=details.documentation,
-        )
-        msf_service.store_module_details(msf_details)
+        msf_service.store_module_details(details)
 
         # Save VulnerabilityTarget
         vuln_service.store_vulnerability_target(path, slm_data)
 
         # Generate Markdown Lab Blueprint Manual
         blueprint_file = blueprint_service.generate_blueprint(path)
-
         if blueprint_file:
             logger.info(
                 f"[{idx}/{len(module_paths)}] Saved Lab Blueprint Manual to: {blueprint_file}"

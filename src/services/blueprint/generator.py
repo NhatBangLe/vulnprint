@@ -63,21 +63,12 @@ class MarkdownBlueprintService(BlueprintService):
                 configs_str = "1. No special pre-requisite configurations identified."
 
             # Retrieve custom VM guideline from VM Guideline Service if enabled
-            vm_guideline = None
-            try:
-                self._logger.info(
-                    f"Querying VM guideline service for VM Installation Guideline for {msf_path}"
-                )
-                guideline_obj = self.guide_service.get_vm_guideline(msf_path)
-                if guideline_obj:
-                    vm_guideline = guideline_obj.guideline
-            except Exception as ex:
-                self._logger.error(
-                    f"Failed to get VM guideline from VM Guideline Service: {ex}"
-                )
-
-            if vm_guideline:
-                setup_instructions = vm_guideline
+            self._logger.info(
+                f"Querying VM guideline service for VM Installation Guideline for {msf_path}"
+            )
+            guideline_obj = self.guide_service.get_vm_guideline(msf_path)
+            if guideline_obj:
+                setup_instructions = guideline_obj
             else:
                 # Default fallback instructions
                 setup_instructions = (

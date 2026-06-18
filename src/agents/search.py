@@ -1,11 +1,20 @@
+from pydantic import BaseModel
+from langchain_core.tools import BaseTool
 import logging
-import asyncio
-from langchain_mcp_adapters.client import MultiServerMCPClient
 from typing import Optional
 from langchain_openai import ChatOpenAI
 from langchain.agents import create_agent
 from langchain.agents.middleware import ToolCallLimitMiddleware
 from services import MSFModuleService, VulnerabilityTargetService
+
+
+class SearchResult(BaseModel):
+    url: str
+    title: str
+    snippet: str
+    description: str
+    categories: list[str] | None = None
+    tags: list[str] | None = None
 
 
 class SearchAgent:
@@ -18,11 +27,12 @@ class SearchAgent:
         self,
         msf_service: MSFModuleService,
         vuln_service: VulnerabilityTargetService,
-        mcp_url: str,
         ai_base_url: str,
         ai_api_key: str,
         ai_model: str,
+        tools: list[BaseTool] | None = None,
         max_tool_calls: int = 5,
+        temperature: float = 0.5,
     ):
         self.msf_service = msf_service
         self.vuln_service = vuln_service
@@ -32,25 +42,19 @@ class SearchAgent:
         self.ai_model = ai_model
 
         self.max_tool_calls = max_tool_calls
-        self.mcp_client = MultiServerMCPClient(
-            {
-                "mcp_search": {
-                    "transport": "http",
-                    "url": mcp_url,
-                }
-            }
-        )
-        self.tools = asyncio.run(self.mcp_client.get_tools())
+        self.tools = tools
+
         self.agent = create_agent(
             name="Search Agent",
             model=ChatOpenAI(
                 base_url=self.ai_base_url,
                 api_key=self.ai_api_key,
                 model=self.ai_model,
+                temperature=temperature,
             ),
             middleware=[ToolCallLimitMiddleware(run_limit=self.max_tool_calls)],
             tools=self.tools,
-            system_message=(
+            system_prompt=(
                 "You are an agentic cybersecurity lab setup engineer. "
                 "Your goal is to search the web using the provided tools to locate installation instructions, "
                 "vulnerable packages, and virtual machine setups for a specific Metasploit module target. "

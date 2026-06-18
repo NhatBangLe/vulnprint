@@ -1,5 +1,6 @@
+import logging
 from models.domain import VMGuidelineStatus
-from search_agent import SearchAgent
+from agents import SearchAgent
 from repositories import VMGuidelineRepository
 from typing import List, Optional
 from .base import VMGuidelineService
@@ -14,6 +15,7 @@ class DefaultVMGuidelineService(VMGuidelineService):
     def __init__(self, guide_repo: VMGuidelineRepository, search_agent: SearchAgent):
         self.guide_repo = guide_repo
         self.search_agent = search_agent
+        self._logger = logging.getLogger(self.__class__.__name__)
 
     def store_vm_guideline(self, vm_guideline: VMGuideline) -> None:
         record = VMGuidelineRecord(
@@ -25,9 +27,7 @@ class DefaultVMGuidelineService(VMGuidelineService):
 
     def get_vm_guideline(self, msf_path: str) -> Optional[VMGuideline]:
         record = self.guide_repo.get_vm_guideline(msf_path)
-        if not record:
-            return None
-        if record.status != VMGuidelineStatus.REJECTED.value:
+        if record and record.status != VMGuidelineStatus.REJECTED.value:
             self._logger.info(
                 f"Retrieved cached guideline from database (status: {record.status}) for {msf_path}"
             )
@@ -37,6 +37,8 @@ class DefaultVMGuidelineService(VMGuidelineService):
             f"Guideline for {msf_path} is REJECTED in database. Regenerating..."
         )
         guideline_str = self.search_agent.search(msf_path)
+        if guideline_str is None:
+            return None
         guideline = VMGuideline(path=msf_path, guideline=guideline_str)
         self.store_vm_guideline(guideline)
         return guideline

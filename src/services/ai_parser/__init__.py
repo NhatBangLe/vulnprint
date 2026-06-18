@@ -1,2 +1,0 @@
-from .base import VulnerabilityMetadataExtractor
-from .parser import LLMVulnerabilityMetadataExtractor
