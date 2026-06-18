@@ -9,5 +9,3 @@ from .vm_guideline.sqlite import SQLiteVMGuidelineRepository
 
 from .software_metadata.base import SoftwareMetadataRepository
 from .software_metadata.sqlite import SQLiteSoftwareMetadataRepository
-
-from .db import DatabaseManager

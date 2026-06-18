@@ -15,8 +15,8 @@ from repositories import (
     SQLiteSoftwareMetadataRepository,
     SQLiteVulnerabilityRepository,
     SQLiteVMGuidelineRepository,
-    DatabaseManager,
 )
+from database import SQLiteDatabaseManager
 from services import (
     DefaultMSFModuleService,
     DefaultVulnerabilityTargetService,
@@ -135,14 +135,14 @@ examples:
 
 def setup_database_and_services(db_path: str, search_agent=None):
     # Initialize database schema using DatabaseManager
-    db_manager = DatabaseManager(db_path=db_path)
+    db_manager = SQLiteDatabaseManager(db_path=db_path)
     db_manager.initialize_schema()
 
     # Instantiate repositories
-    msf_repo = SQLiteMSFModuleRepository(db_path=db_path)
-    software_repo = SQLiteSoftwareMetadataRepository(db_path=db_path)
-    vuln_repo = SQLiteVulnerabilityRepository(db_path=db_path)
-    guide_repo = SQLiteVMGuidelineRepository(db_path=db_path)
+    msf_repo = SQLiteMSFModuleRepository(db_manager=db_manager)
+    software_repo = SQLiteSoftwareMetadataRepository(db_manager=db_manager)
+    vuln_repo = SQLiteVulnerabilityRepository(db_manager=db_manager)
+    guide_repo = SQLiteVMGuidelineRepository(db_manager=db_manager)
 
     # Wrap repositories in Domain Services
     msf_service = DefaultMSFModuleService(msf_repo=msf_repo, vuln_repo=vuln_repo)
@@ -334,15 +334,15 @@ def handle_search_ingestion(
         )
         sys.exit(1)
 
-    # Instantiate repositories
-    msf_repo = SQLiteMSFModuleRepository(db_path=db_path)
-    software_repo = SQLiteSoftwareMetadataRepository(db_path=db_path)
-    vuln_repo = SQLiteVulnerabilityRepository(db_path=db_path)
-    guide_repo = SQLiteVMGuidelineRepository(db_path=db_path)
-
     logger.info(f"Initializing local database split repository tables at {db_path}...")
-    db_manager = DatabaseManager(db_path=db_path)
+    db_manager = SQLiteDatabaseManager(db_path=db_path)
     db_manager.initialize_schema()
+
+    # Instantiate repositories
+    msf_repo = SQLiteMSFModuleRepository(db_manager=db_manager)
+    software_repo = SQLiteSoftwareMetadataRepository(db_manager=db_manager)
+    vuln_repo = SQLiteVulnerabilityRepository(db_manager=db_manager)
+    guide_repo = SQLiteVMGuidelineRepository(db_manager=db_manager)
 
     # Wrap repositories in Domain Services
     msf_service = DefaultMSFModuleService(msf_repo=msf_repo, vuln_repo=vuln_repo)
@@ -412,9 +412,8 @@ def handle_search_ingestion(
         # Fetch module details from Metasploit
         details = metasploit_service.get_module_details(path)
         desc = details.description
-        cves = details.cves
 
-        if not desc:
+        if not desc or len(desc.strip()) == 0:
             logger.warning(
                 f"[{idx}/{len(module_paths)}] Module description is empty. Skipping model analysis."
             )
@@ -427,12 +426,10 @@ def handle_search_ingestion(
             )
             slm_data = extractor.extract_metadata(desc, details.documentation)
 
-        # Persist analytics in separate services using Domain Model structures
         logger.info(
             f"[{idx}/{len(module_paths)}] Recording intelligence in database ledger..."
         )
-
-        # 1. Save MetasploitModuleDetails via msf_service
+        # Save MetasploitModuleDetails
         msf_details = MetasploitModuleDetails(
             description=details.description,
             cves=details.cves,
@@ -446,7 +443,7 @@ def handle_search_ingestion(
         )
         msf_service.store_module_details(msf_details)
 
-        # 2. Save VulnerabilityTarget via vuln_service
+        # Save VulnerabilityTarget
         vuln_service.store_vulnerability_target(path, slm_data)
 
         # Generate Markdown Lab Blueprint Manual

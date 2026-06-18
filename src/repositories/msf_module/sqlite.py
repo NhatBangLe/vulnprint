@@ -1,4 +1,4 @@
-import sqlite3
+from database import SQLiteDatabaseManager, DatabaseManager
 import json
 import logging
 from typing import List, Optional, Tuple
@@ -16,14 +16,16 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
     SQLite implementation for msf_modules table operations.
     """
 
-    def __init__(self, db_path: str = "lab_hub.db"):
-        self.db_path = db_path
+    def __init__(self, db_manager: DatabaseManager):
+        if not isinstance(db_manager, SQLiteDatabaseManager):
+            raise TypeError("db_manager must be an instance of DatabaseManager")
+        self.db_manager: SQLiteDatabaseManager = db_manager
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def store_module_metadata(self, record: MSFModuleRecord) -> None:
         conn = None
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = self.db_manager.get_connection()
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -54,7 +56,7 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
     def get_module_metadata(self, path: str) -> Optional[MSFModuleRecord]:
         conn = None
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = self.db_manager.get_connection()
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -70,7 +72,7 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
                 m_path,
                 m_name,
                 display_name,
-                mtype,
+                m_type,
                 rank,
                 disclosure_date,
                 platform_raw,
@@ -81,7 +83,7 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
                 path=m_path,
                 name=m_name or "",
                 display_name=display_name or "",
-                type=mtype or "",
+                type=m_type or "",
                 rank=rank or "",
                 disclosure_date=disclosure_date or "",
                 platform=json.loads(platform_raw) if platform_raw else [],
@@ -98,7 +100,7 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
     def get_all_paths(self) -> List[str]:
         conn = None
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = self.db_manager.get_connection()
             cursor = conn.cursor()
             cursor.execute("SELECT path FROM msf_modules ORDER BY path ASC;")
             return [row[0] for row in cursor.fetchall() if row[0]]
@@ -112,10 +114,10 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
     def get_total_count(self) -> int:
         conn = None
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = self.db_manager.get_connection()
             cursor = conn.cursor()
             cursor.execute("SELECT COUNT(*) FROM msf_modules;")
-            return cursor.fetchone()[0]
+            return int(cursor.fetchone()[0])
         except Exception as e:
             self._logger.error(f"Error getting total module count: {e}")
             return 0
@@ -126,7 +128,7 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
     def get_rank_distribution(self) -> List[Tuple[str, int]]:
         conn = None
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = self.db_manager.get_connection()
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -150,7 +152,7 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
 
         conn = None
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = self.db_manager.get_connection()
             cursor = conn.cursor()
             cursor.execute(
                 "SELECT platform FROM msf_modules WHERE platform IS NOT NULL;"
@@ -179,7 +181,7 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
     def get_disclosure_timeline(self) -> List[Tuple[str, int]]:
         conn = None
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = self.db_manager.get_connection()
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -213,7 +215,7 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
     ]:
         conn = None
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = self.db_manager.get_connection()
             cursor = conn.cursor()
             query = """
                 SELECT m.path, m.name, m.display_name, m.type, m.rank, m.disclosure_date, m.platform, m.documentation, m.description,

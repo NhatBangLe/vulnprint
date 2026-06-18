@@ -1,8 +1,8 @@
-import sqlite3
 import logging
 from typing import List, Optional
 from .base import VMGuidelineRepository
 from models import VMGuidelineRecord
+from database import DatabaseManager, SQLiteDatabaseManager
 
 
 class SQLiteVMGuidelineRepository(VMGuidelineRepository):
@@ -10,14 +10,16 @@ class SQLiteVMGuidelineRepository(VMGuidelineRepository):
     SQLite implementation for vm_guidelines table operations.
     """
 
-    def __init__(self, db_path: str = "lab_hub.db"):
-        self.db_path = db_path
+    def __init__(self, db_manager: DatabaseManager):
+        if not isinstance(db_manager, SQLiteDatabaseManager):
+            raise TypeError("db_manager must be an instance of DatabaseManager")
+        self.db_manager: SQLiteDatabaseManager = db_manager
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def store_vm_guideline(self, record: VMGuidelineRecord) -> None:
         conn = None
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = self.db_manager.get_connection()
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -38,14 +40,14 @@ class SQLiteVMGuidelineRepository(VMGuidelineRepository):
             if conn:
                 conn.close()
 
-    def get_vm_guideline(self, path: str) -> Optional[VMGuidelineRecord]:
+    def get_vm_guideline(self, msf_path: str) -> Optional[VMGuidelineRecord]:
         conn = None
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = self.db_manager.get_connection()
             cursor = conn.cursor()
             cursor.execute(
                 "SELECT path, guideline, status, created_at, updated_at FROM vm_guidelines WHERE path = ?;",
-                (path,),
+                (msf_path,),
             )
             row = cursor.fetchone()
             if not row:
@@ -58,7 +60,7 @@ class SQLiteVMGuidelineRepository(VMGuidelineRepository):
                 updated_at=row[4],
             )
         except Exception as e:
-            self._logger.error(f"Error retrieving VM guideline for {path}: {e}")
+            self._logger.error(f"Error retrieving VM guideline for {msf_path}: {e}")
             return None
         finally:
             if conn:
@@ -67,7 +69,7 @@ class SQLiteVMGuidelineRepository(VMGuidelineRepository):
     def get_unverified_guidelines(self) -> List[VMGuidelineRecord]:
         conn = None
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = self.db_manager.get_connection()
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -98,11 +100,11 @@ class SQLiteVMGuidelineRepository(VMGuidelineRepository):
                 conn.close()
 
     def update_guideline_status(
-        self, path: str, status: str, guideline: Optional[str] = None
+        self, msf_path: str, status: str, guideline: Optional[str] = None
     ) -> None:
         conn = None
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = self.db_manager.get_connection()
             cursor = conn.cursor()
             if guideline is not None:
                 cursor.execute(
@@ -111,7 +113,7 @@ class SQLiteVMGuidelineRepository(VMGuidelineRepository):
                     SET status = ?, guideline = ?, updated_at = CURRENT_TIMESTAMP 
                     WHERE path = ?;
                     """,
-                    (status, guideline, path),
+                    (status, guideline, msf_path),
                 )
             else:
                 cursor.execute(
@@ -120,11 +122,11 @@ class SQLiteVMGuidelineRepository(VMGuidelineRepository):
                     SET status = ?, updated_at = CURRENT_TIMESTAMP 
                     WHERE path = ?;
                     """,
-                    (status, path),
+                    (status, msf_path),
                 )
             conn.commit()
         except Exception as e:
-            self._logger.error(f"Error updating guideline status for {path}: {e}")
+            self._logger.error(f"Error updating guideline status for {msf_path}: {e}")
             raise
         finally:
             if conn:

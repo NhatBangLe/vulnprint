@@ -16,7 +16,7 @@ class SoftwareMetadataRepository(ABC):
         pass
 
     @abstractmethod
-    def get_software_metadata(self, path: str) -> Optional[SoftwareMetadataRecord]:
+    def get_software_metadata(self, msf_path: str) -> Optional[SoftwareMetadataRecord]:
         """
         Retrieves software metadata for the given module path.
         """

@@ -1,27 +1,31 @@
 import sqlite3
 import logging
+from .base import DatabaseManager
 
-class DatabaseManager:
+
+class SQLiteDatabaseManager(DatabaseManager):
     """
     Manages the SQLite database connection and schema initialization.
     """
+
     def __init__(self, db_path: str = "lab_hub.db"):
         self.db_path = db_path
         self._logger = logging.getLogger(self.__class__.__name__)
 
+    def get_connection(self) -> sqlite3.Connection:
+        return sqlite3.connect(self.db_path)
+
     def initialize_schema(self) -> None:
-        """
-        Initializes the entire database schema in the correct dependency order.
-        """
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = self.get_connection()
             cursor = conn.cursor()
-            
+
             # Enable foreign keys
             cursor.execute("PRAGMA foreign_keys = ON;")
-            
+
             # 1. msf_modules table
-            cursor.execute("""
+            cursor.execute(
+                """
             CREATE TABLE IF NOT EXISTS msf_modules (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 path TEXT UNIQUE NOT NULL,
@@ -35,10 +39,12 @@ class DatabaseManager:
                 description TEXT,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             );
-            """)
+            """
+            )
 
             # 2. software_metadata table
-            cursor.execute("""
+            cursor.execute(
+                """
             CREATE TABLE IF NOT EXISTS software_metadata (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 path TEXT UNIQUE NOT NULL,
@@ -46,10 +52,12 @@ class DatabaseManager:
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (path) REFERENCES msf_modules(path) ON DELETE CASCADE
             );
-            """)
+            """
+            )
 
             # 3. vulnerabilities table
-            cursor.execute("""
+            cursor.execute(
+                """
             CREATE TABLE IF NOT EXISTS vulnerabilities (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 path TEXT UNIQUE NOT NULL,
@@ -59,10 +67,12 @@ class DatabaseManager:
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (path) REFERENCES software_metadata(path) ON DELETE CASCADE
             );
-            """)
+            """
+            )
 
             # 4. vm_guidelines table
-            cursor.execute("""
+            cursor.execute(
+                """
             CREATE TABLE IF NOT EXISTS vm_guidelines (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 path TEXT UNIQUE NOT NULL,
@@ -72,7 +82,8 @@ class DatabaseManager:
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (path) REFERENCES msf_modules(path) ON DELETE CASCADE
             );
-            """)
+            """
+            )
 
             conn.commit()
             conn.close()
