@@ -1,6 +1,5 @@
 import logging
 from models.domain import VMGuidelineStatus
-from agents import SearchAgent
 from repositories import VMGuidelineRepository
 from typing import List, Optional
 from .base import VMGuidelineService
@@ -12,9 +11,11 @@ class DefaultVMGuidelineService(VMGuidelineService):
     Default implementation of the VMGuidelineService interface.
     """
 
-    def __init__(self, guide_repo: VMGuidelineRepository, search_agent: SearchAgent):
+    def __init__(
+        self,
+        guide_repo: VMGuidelineRepository,
+    ):
         self.guide_repo = guide_repo
-        self.search_agent = search_agent
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def store_vm_guideline(self, vm_guideline: VMGuideline) -> None:
@@ -32,16 +33,7 @@ class DefaultVMGuidelineService(VMGuidelineService):
                 f"Retrieved cached guideline from database (status: {record.status}) for {msf_path}"
             )
             return VMGuideline.from_record(record)
-
-        self._logger.warning(
-            f"Guideline for {msf_path} is REJECTED in database. Regenerating..."
-        )
-        guideline_str = self.search_agent.search(msf_path)
-        if guideline_str is None:
-            return None
-        guideline = VMGuideline(path=msf_path, guideline=guideline_str)
-        self.store_vm_guideline(guideline)
-        return guideline
+        return None
 
     def get_unverified_guidelines(self) -> List[VMGuideline]:
         records = self.guide_repo.get_unverified_guidelines()

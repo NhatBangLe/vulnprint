@@ -1,5 +1,4 @@
 import asyncio
-from langchain_core.tools import BaseTool
 from langchain_mcp_adapters.client import MultiServerMCPClient
 import sys
 import argparse
@@ -8,8 +7,6 @@ import logging
 from typing import Optional
 from models import (
     CLIArguments,
-    VulnerabilityTarget,
-    MetasploitModuleDetails,
 )
 from services.metasploit import MetasploitRPCService
 from repositories import (
@@ -24,7 +21,7 @@ from services import (
     DefaultVulnerabilityTargetService,
     DefaultVMGuidelineService,
 )
-from agents import VulnerabilityTargetExtractorAgent, SearchAgent
+from agents import VulnerabilityTargetExtractorAgent, VMGuidelineGeneratorAgent
 from services.blueprint import MarkdownBlueprintService
 from services.analytics import CLIAnalyticsService
 from config import settings
@@ -135,7 +132,7 @@ examples:
     )
 
 
-def setup_database_and_services(db_path: str, search_agent=None):
+def setup_database_and_services(db_path: str):
     # Initialize database schema using DatabaseManager
     db_manager = SQLiteDatabaseManager(db_path=db_path)
     db_manager.initialize_schema()
@@ -151,9 +148,7 @@ def setup_database_and_services(db_path: str, search_agent=None):
     vuln_service = DefaultVulnerabilityTargetService(
         software_repo=software_repo, vuln_repo=vuln_repo
     )
-    guide_service = DefaultVMGuidelineService(
-        guide_repo=guide_repo, search_agent=search_agent
-    )
+    guide_service = DefaultVMGuidelineService(guide_repo=guide_repo)
 
     return msf_service, vuln_service, guide_service
 
@@ -261,19 +256,6 @@ def handle_review_mode(
                 print("Invalid choice. Please select 1, 2, 3, 4, or q.")
 
 
-def list_mcp_tools(mcp_url: str) -> list[BaseTool]:
-    mcp_client = MultiServerMCPClient(
-        {
-            "mcp_search": {
-                "transport": "http",
-                "url": mcp_url,
-            }
-        }
-    )
-    tools = asyncio.run(mcp_client.get_tools())
-    return tools
-
-
 def handle_export_guide_mode(
     guide_service,
     export_guide_path: str,
@@ -332,87 +314,76 @@ def handle_analytics_mode(
 
 def handle_search_ingestion(
     args: CLIArguments,
-    db_path: str,
+    msf_service,
+    vuln_service,
+    guide_service,
     logger: logging.Logger,
-    msf_host: str,
-    msf_port: str,
-    msf_password: str,
-    ai_base_url: str,
-    ai_api_key: str,
-    ai_model: str,
-    blueprints_dir: str,
 ) -> None:
-    if not msf_password:
+    if not settings.msf_rpc_password:
         logger.error(
             "Critical Error: MSF_RPC_PASSWORD environment variable is not defined. "
             "Please create a .env file containing the secure Metasploit RPC password."
         )
         sys.exit(1)
 
-    logger.info(f"Initializing local database split repository tables at {db_path}...")
-    db_manager = SQLiteDatabaseManager(db_path=db_path)
-    db_manager.initialize_schema()
-
-    # Instantiate repositories
-    msf_repo = SQLiteMSFModuleRepository(db_manager=db_manager)
-    software_repo = SQLiteSoftwareMetadataRepository(db_manager=db_manager)
-    vuln_repo = SQLiteVulnerabilityRepository(db_manager=db_manager)
-    guide_repo = SQLiteVMGuidelineRepository(db_manager=db_manager)
-
-    # Wrap repositories in Domain Services
-    msf_service = DefaultMSFModuleService(msf_repo=msf_repo, vuln_repo=vuln_repo)
-    vuln_service = DefaultVulnerabilityTargetService(
-        software_repo=software_repo, vuln_repo=vuln_repo
+    logger.info(
+        f"Connecting to Metasploit RPC Daemon at {settings.msf_rpc_host}:{settings.msf_rpc_port}..."
     )
-
-    logger.info(f"Connecting to Metasploit RPC Daemon at {msf_host}:{msf_port}...")
     metasploit_service = MetasploitRPCService(
-        host=msf_host, port=msf_port, password=msf_password, ssl=True
+        host=settings.msf_rpc_host,
+        port=settings.msf_rpc_port,
+        password=settings.msf_rpc_password,
+        ssl=True,
     )
     try:
         metasploit_service.connect()
     except Exception:
         sys.exit(1)
 
-    tools = list_mcp_tools(settings.mcp_search_url)
-
-    extractor = VulnerabilityTargetExtractorAgent(
-        tools=tools, ai_base_url=ai_base_url, ai_api_key=ai_api_key, ai_model=ai_model
+    # Initialize agents
+    logger.info("Initializing AI agents...")
+    tools = asyncio.run(
+        MultiServerMCPClient(
+            {
+                "mcp_search": {
+                    "transport": "http",
+                    "url": settings.mcp_search_url,
+                }
+            }
+        ).get_tools()
     )
-
-    # Initialize search agent
-    search_agent = SearchAgent(
+    extractor = VulnerabilityTargetExtractorAgent(
+        tools=tools,
+        ai_base_url=settings.ai_base_url,
+        ai_api_key=settings.ai_api_key,
+        ai_model=settings.ai_model,
+    )
+    vm_guideline_generator_agent = VMGuidelineGeneratorAgent(
         msf_service=msf_service,
         vuln_service=vuln_service,
-        ai_base_url=ai_base_url,
-        ai_api_key=ai_api_key,
-        ai_model=ai_model,
+        ai_base_url=settings.ai_base_url,
+        ai_api_key=settings.ai_api_key,
+        ai_model=settings.ai_model,
         tools=tools,
         max_tool_calls=settings.mcp_max_tool_calls,
-    )
-
-    # Initialize guide service with search agent
-    guide_service = DefaultVMGuidelineService(
-        guide_repo=guide_repo, search_agent=search_agent
     )
 
     # Initialize blueprint service
     blueprint_service = MarkdownBlueprintService(
         msf_service=msf_service,
         vuln_service=vuln_service,
-        output_dir=blueprints_dir,
+        output_dir=settings.blueprints_dir,
         guide_service=guide_service,
+        vm_guideline_generator_agent=vm_guideline_generator_agent,
     )
 
     logger.info(f"Executing search query: '{args.search}'")
     module_paths = metasploit_service.search_modules(args.search)
-
     if not module_paths:
         logger.warning(
             "No exploit modules matched the search query or buffer read failed."
         )
         return
-
     logger.info(f"Found {len(module_paths)} matching exploit modules.")
 
     # Apply module cap limit
@@ -429,14 +400,13 @@ def handle_search_ingestion(
         # Fetch module details from Metasploit
         details = metasploit_service.get_module_details(path)
         desc = details.description
-
         if not desc or len(desc.strip()) == 0:
             logger.warning(
                 f"[{idx}/{len(module_paths)}] Module description is empty. Skipping model analysis."
             )
         else:
             logger.info(
-                f"[{idx}/{len(module_paths)}] Interrogating AI model ({ai_model}) to extract software metadata..."
+                f"[{idx}/{len(module_paths)}] Interrogating AI model ({settings.ai_model}) to extract software metadata..."
             )
             slm_data = extractor.extract(
                 description=desc, documentation=details.documentation
@@ -451,10 +421,7 @@ def handle_search_ingestion(
         logger.info(
             f"[{idx}/{len(module_paths)}] Recording intelligence in database ledger..."
         )
-        # Save MetasploitModuleDetails
         msf_service.store_module_details(details)
-
-        # Save VulnerabilityTarget
         vuln_service.store_vulnerability_target(path, slm_data)
 
         # Generate Markdown Lab Blueprint Manual
@@ -482,6 +449,11 @@ def main():
     # CLI Argument Parsing Setup
     args = parse_args()
 
+    logger.info("Initializing database and services...")
+    msf_service, vuln_service, guide_service = setup_database_and_services(
+        db_path=settings.database_path,
+    )
+
     # Route based on command/mode
     if (
         args.analytics
@@ -491,11 +463,6 @@ def main():
         or args.review
         or args.export_guide
     ):
-        msf_service, vuln_service, guide_service = setup_database_and_services(
-            db_path=settings.database_path,
-            search_agent=None,
-        )
-
         if args.review:
             handle_review_mode(guide_service, vuln_service, msf_service, logger)
         elif args.export_guide:
@@ -507,19 +474,13 @@ def main():
             )
         else:
             handle_analytics_mode(args, msf_service, vuln_service, guide_service)
-
     elif args.search:
         handle_search_ingestion(
             args=args,
-            db_path=settings.database_path,
+            msf_service=msf_service,
+            vuln_service=vuln_service,
+            guide_service=guide_service,
             logger=logger,
-            msf_host=settings.msf_rpc_host,
-            msf_port=settings.msf_rpc_port,
-            msf_password=settings.msf_rpc_password,
-            ai_base_url=settings.ai_base_url,
-            ai_api_key=settings.ai_api_key,
-            ai_model=settings.ai_model,
-            blueprints_dir=settings.blueprints_dir,
         )
 
 

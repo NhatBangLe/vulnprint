@@ -1,28 +1,23 @@
-from pydantic import BaseModel
-from langchain_core.tools import BaseTool
 import logging
-from typing import Optional
+import asyncio
+from typing import Optional, List
+from pydantic import BaseModel, Field, ValidationError
+from langchain_core.tools import BaseTool
 from langchain_openai import ChatOpenAI
 from langchain.agents import create_agent
 from langchain.agents.middleware import ToolCallLimitMiddleware
 from services import MSFModuleService, VulnerabilityTargetService
+from models import VMGuideline, VMGuidelineStatus
 
 
-class SearchResult(BaseModel):
-    url: str
-    title: str
-    snippet: str
-    description: str
-    categories: list[str] | None = None
-    tags: list[str] | None = None
+class VMGuidelineGeneratorResult(BaseModel):
+    summary: str = Field(
+        ...,
+        description="A detailed step-by-step VM Installation Guideline summarizing all installation instructions, requirements, and findings.",
+    )
 
 
-class SearchAgent:
-    """
-    Agent coordinates verified/unverified VM Guideline searches.
-    Uses MCPSearchClient to query external search tools and LLM to structure outputs.
-    """
-
+class VMGuidelineGeneratorAgent:
     def __init__(
         self,
         msf_service: MSFModuleService,
@@ -30,7 +25,7 @@ class SearchAgent:
         ai_base_url: str,
         ai_api_key: str,
         ai_model: str,
-        tools: list[BaseTool] | None = None,
+        tools: Optional[List[BaseTool]] = None,
         max_tool_calls: int = 5,
         temperature: float = 0.5,
     ):
@@ -45,7 +40,7 @@ class SearchAgent:
         self.tools = tools
 
         self.agent = create_agent(
-            name="Search Agent",
+            name="VM Guideline Generator Agent",
             model=ChatOpenAI(
                 base_url=self.ai_base_url,
                 api_key=self.ai_api_key,
@@ -62,10 +57,11 @@ class SearchAgent:
                 "Use the tools iteratively as needed up to the limit. Once you have enough information, "
                 "compile a highly practical, step-by-step VM Installation Guideline for this module target."
             ),
+            response_format=VMGuidelineGeneratorResult,
         )
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def search(self, msf_path: str) -> Optional[str]:
+    def generate(self, msf_path: str) -> Optional[VMGuideline]:
         """
         Synchronously communicates with tools, lets the LLM execute search queries,
         and returns the synthesized guideline.
@@ -98,17 +94,44 @@ class SearchAgent:
             else "None"
         )
 
-        user_content = (
-            f"Generate a Virtual Machine Installation Guideline for this Metasploit module:\n"
-            f"Module Path: {msf_details.module_name}\n"
-            f"Associated CVEs: {cves_str}\n"
-            f"Software Target: {vuln_target.software_name}\n"
-            f"Vulnerable Versions: {versions_str}\n"
-            f"Required Configurations: {configs_str}\n"
-            f"Description: {msf_details.description}\n"
-        )
+        try:
+            user_content = (
+                f"Generate a Virtual Machine Installation Guideline for this Metasploit module:\n"
+                f"Module Path: {msf_details.module_name}\n"
+                f"Associated CVEs: {cves_str}\n"
+                f"Software Target: {vuln_target.software_name}\n"
+                f"Vulnerable Versions: {versions_str}\n"
+                f"Required Configurations: {configs_str}\n"
+                f"Description: {msf_details.description}\n"
+            )
 
-        result = self.agent.invoke(
-            {"messages": [{"role": "user", "content": user_content}]},
-        )
-        return result
+            result = asyncio.run(
+                self.agent.ainvoke(
+                    {"messages": [{"role": "user", "content": user_content}]},
+                )
+            )
+            parsed_content = result["structured_response"]
+
+            if not isinstance(parsed_content, VMGuidelineGeneratorResult):
+                self._logger.warning(
+                    "Cannot parse VM Guideline Generator result from LLM output."
+                )
+                return None
+            return VMGuideline(
+                path=msf_path,
+                guideline=parsed_content.summary,
+                status=VMGuidelineStatus.UNVERIFIED,
+            )
+        except ValidationError as e:
+            self._logger.error(f"Validation error: {e}")
+            for error in e.errors():
+                self._logger.error(
+                    "Error Message: {msg}."
+                    "\nError Location: {loc}, "
+                    "Error Type: {type}, "
+                    "Input:\n{input}".format(**error)
+                )
+            return None
+        except Exception as e:
+            self._logger.error(f"Error during agent invocation: {e}")
+            return None

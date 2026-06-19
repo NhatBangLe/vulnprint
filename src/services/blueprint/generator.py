@@ -5,6 +5,7 @@ from typing import Optional
 from .base import BlueprintService
 from services import MSFModuleService, VulnerabilityTargetService, VMGuidelineService
 from models import VulnerabilityTarget
+from agents import VMGuidelineGeneratorAgent
 
 
 class MarkdownBlueprintService(BlueprintService):
@@ -17,12 +18,14 @@ class MarkdownBlueprintService(BlueprintService):
         msf_service: MSFModuleService,
         vuln_service: VulnerabilityTargetService,
         guide_service: VMGuidelineService,
+        vm_guideline_generator_agent: VMGuidelineGeneratorAgent,
         output_dir: str = "vulnprint_blueprints/",
     ):
         self.msf_service = msf_service
         self.vuln_service = vuln_service
         self.output_dir = output_dir
         self.guide_service = guide_service
+        self.vm_guideline_generator_agent = vm_guideline_generator_agent
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def generate_blueprint(self, msf_path: str) -> Optional[str]:
@@ -62,21 +65,32 @@ class MarkdownBlueprintService(BlueprintService):
             else:
                 configs_str = "1. No special pre-requisite configurations identified."
 
-            # Retrieve custom VM guideline from VM Guideline Service if enabled
-            self._logger.info(
-                f"Querying VM guideline service for VM Installation Guideline for {msf_path}"
-            )
-            guideline_obj = self.guide_service.get_vm_guideline(msf_path)
-            if guideline_obj:
-                setup_instructions = guideline_obj
+            # Retrieve VM guideline from VM Guideline Service
+            self._logger.info(f"Querying VM guideline for {msf_path}")
+            vm_guideline = self.guide_service.get_vm_guideline(msf_path)
+            if vm_guideline:
+                setup_instructions = vm_guideline.guideline
             else:
-                # Default fallback instructions
-                setup_instructions = (
-                    "1. Download the specific legacy target executable or system binary package matching the versions identified above directly from standard open historical software archives.\n"
-                    "2. Initialize a local, network-isolated virtual machine or manual container image environment.\n"
-                    '3. Apply the environment parameters specified within the "Configuration Rules" section above.\n'
-                    "4. Verify local port binding allocations using standard troubleshooting utilities (`netstat`, `ss`, or `lsof`)."
+                self._logger.warning(
+                    f"Guideline for {msf_path} not found in database or rejected. Regenerating..."
                 )
+                vm_guideline = self.vm_guideline_generator_agent.generate(msf_path)
+                if vm_guideline:
+                    self.guide_service.store_vm_guideline(vm_guideline)
+                    self._logger.info(
+                        f"Stored the newly generated VM guideline for {msf_path}"
+                    )
+                    setup_instructions = vm_guideline.guideline
+                else:
+                    self._logger.error(
+                        f"Failed to generate guideline for {msf_path}. Using fallback instructions."
+                    )
+                    setup_instructions = (
+                        "1. Download the specific legacy target executable or system binary package matching the versions identified above directly from standard open historical software archives.\n"
+                        "2. Initialize a local, network-isolated virtual machine or manual container image environment.\n"
+                        '3. Apply the environment parameters specified within the "Configuration Rules" section above.\n'
+                        "4. Verify local port binding allocations using standard troubleshooting utilities (`netstat`, `ss`, or `lsof`)."
+                    )
 
             # Build the exact template layout required
             template = f"""# 📄 Lab Blueprint Manual: {software_name}

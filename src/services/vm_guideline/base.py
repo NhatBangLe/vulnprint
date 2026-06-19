@@ -6,7 +6,6 @@ from models import VMGuideline
 class VMGuidelineService(ABC):
     """
     Interface for VM guidelines service.
-    Deals exclusively with the VMGuideline domain model.
     """
 
     @abstractmethod
