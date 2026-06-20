@@ -34,10 +34,21 @@ class SQLiteDatabaseManager(DatabaseManager):
                 type TEXT,
                 rank TEXT,
                 disclosure_date TEXT,
-                platform TEXT,
                 documentation TEXT,
                 description TEXT,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+            """
+            )
+
+            # 2. module_platforms table
+            cursor.execute(
+                """
+            CREATE TABLE IF NOT EXISTS module_platforms (
+                module_path TEXT NOT NULL,
+                platform TEXT NOT NULL,
+                PRIMARY KEY (module_path, platform),
+                FOREIGN KEY (module_path) REFERENCES msf_modules(path) ON DELETE CASCADE
             );
             """
             )
@@ -63,12 +74,24 @@ class SQLiteDatabaseManager(DatabaseManager):
                 """
             CREATE TABLE IF NOT EXISTS vm_guidelines (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                path TEXT UNIQUE NOT NULL,
                 guideline TEXT NOT NULL,
                 status TEXT DEFAULT 'UNVERIFIED',
+                platform TEXT,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (path) REFERENCES msf_modules(path) ON DELETE CASCADE
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+            """
+            )
+
+            # 4. module_guidelines table
+            cursor.execute(
+                """
+            CREATE TABLE IF NOT EXISTS module_guidelines (
+                module_path TEXT NOT NULL,
+                guideline_id INTEGER NOT NULL,
+                PRIMARY KEY (module_path, guideline_id),
+                FOREIGN KEY (module_path) REFERENCES msf_modules(path) ON DELETE CASCADE,
+                FOREIGN KEY (guideline_id) REFERENCES vm_guidelines(id) ON DELETE CASCADE
             );
             """
             )

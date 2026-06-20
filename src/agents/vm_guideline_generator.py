@@ -11,7 +11,11 @@ from models import VMGuideline, VMGuidelineStatus
 
 
 class VMGuidelineGeneratorResult(BaseModel):
-    summary: str = Field(
+    platform: str = Field(
+        ...,
+        description="The target platform which you chose to build a VM for the Metasploit module.",
+    )
+    guideline: str = Field(
         ...,
         description="A detailed step-by-step VM Installation Guideline summarizing all installation instructions, requirements, and findings.",
     )
@@ -27,7 +31,7 @@ class VMGuidelineGeneratorAgent:
         ai_model: str,
         tools: Optional[List[BaseTool]] = None,
         max_tool_calls: int = 5,
-        temperature: float = 0.5,
+        temperature: float = 0.4,
     ):
         self.msf_service = msf_service
         self.vuln_service = vuln_service
@@ -103,6 +107,7 @@ class VMGuidelineGeneratorAgent:
                 f"Vulnerable Versions: {versions_str}\n"
                 f"Required Configurations: {configs_str}\n"
                 f"Description: {msf_details.description}\n"
+                f"Available target platforms: {msf_details.platform}\n"
             )
 
             result = asyncio.run(
@@ -119,7 +124,8 @@ class VMGuidelineGeneratorAgent:
                 return None
             return VMGuideline(
                 path=msf_path,
-                guideline=parsed_content.summary,
+                guideline=parsed_content.guideline,
+                platform=parsed_content.platform,
                 status=VMGuidelineStatus.UNVERIFIED,
             )
         except ValidationError as e:

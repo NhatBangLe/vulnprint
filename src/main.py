@@ -142,10 +142,10 @@ def setup_database_and_services(db_path: str):
     guide_repo = SQLiteVMGuidelineRepository(db_manager=db_manager)
 
     # Wrap repositories in Domain Services
-    msf_service = DefaultMSFModuleService(msf_repo=msf_repo, software_repo=software_repo)
-    vuln_service = DefaultVulnerabilityTargetService(
-        software_repo=software_repo
+    msf_service = DefaultMSFModuleService(
+        msf_repo=msf_repo, software_repo=software_repo
     )
+    vuln_service = DefaultVulnerabilityTargetService(software_repo=software_repo)
     guide_service = DefaultVMGuidelineService(guide_repo=guide_repo)
 
     return msf_service, vuln_service, guide_service
@@ -260,16 +260,26 @@ def handle_export_guide_mode(
     export_file_path: Optional[str],
     logger: logging.Logger,
 ) -> None:
-    guide_domain = guide_service.get_vm_guideline(export_guide_path)
-    if not guide_domain:
-        logger.error(f"No VM guideline found for Metasploit path: {export_guide_path}")
-        return
+    if export_guide_path.isdigit():
+        guide_domain = guide_service.get_vm_guideline(int(export_guide_path))
+        if not guide_domain:
+            logger.error(f"No VM guideline found for: {export_guide_path}")
+            return
+        guide_domains = [guide_domain]
+    else:
+        guide_domains = guide_service.get_vm_guideline_by_path(export_guide_path)
+        if not guide_domains:
+            logger.error(f"No VM guidelines found for: {export_guide_path}")
+            return
 
-    output_text = (
-        f"# VM Installation Guideline for: {guide_domain.path}\n"
-        f"Verification Status: {guide_domain.status}\n\n"
-        f"{guide_domain.guideline}\n"
-    )
+    output_parts = []
+    for g in guide_domains:
+        output_parts.append(
+            f"# VM Installation Guideline for: {g.path} (ID: {g.id})\n"
+            f"Verification Status: {g.status}\n\n"
+            f"{g.guideline}\n"
+        )
+    output_text = "\n---\n\n".join(output_parts)
 
     if export_file_path:
         try:

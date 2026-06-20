@@ -29,5 +29,6 @@ class VMGuidelineRecord(BaseModel):
     path: str
     guideline: str
     status: str = "UNVERIFIED"
+    platform: str = ""
     created_at: Optional[str] = None
     updated_at: Optional[str] = None

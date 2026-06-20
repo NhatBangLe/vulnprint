@@ -4,7 +4,7 @@ import json
 from typing import Optional
 from .base import BlueprintService
 from services import MSFModuleService, VulnerabilityTargetService, VMGuidelineService
-from models import VulnerabilityTarget
+from models import VulnerabilityTarget, VMGuidelineStatus
 from agents import VMGuidelineGeneratorAgent
 
 
@@ -67,9 +67,20 @@ class MarkdownBlueprintService(BlueprintService):
 
             # Retrieve VM guideline from VM Guideline Service
             self._logger.info(f"Querying VM guideline for {msf_path}")
-            vm_guideline = self.guide_service.get_vm_guideline(msf_path)
-            if vm_guideline:
-                setup_instructions = vm_guideline.guideline
+            vm_guidelines = self.guide_service.get_vm_guideline_by_path(msf_path)
+            if vm_guidelines:
+                verified_guide = next(
+                    (
+                        g
+                        for g in vm_guidelines
+                        if g.status == VMGuidelineStatus.VERIFIED
+                    ),
+                    None,
+                )
+                if verified_guide:
+                    setup_instructions = verified_guide.guideline
+                else:
+                    setup_instructions = vm_guidelines[0].guideline
             else:
                 self._logger.warning(
                     f"Guideline for {msf_path} not found in database or rejected. Regenerating..."
@@ -108,18 +119,6 @@ class MarkdownBlueprintService(BlueprintService):
 ## 🛠️ Manual Lab Setup Instructions
 
 {setup_instructions}
-
-## ⚔️ Verification & Exploitation Testing Lifecycle
-
-Launch `msfconsole`, initialize communications, and utilize these precise directives to execute validation scripts against your manual host target environment:
-
-```msf
-use {msf_path}
-set RHOSTS <TARGET_VIRTUAL_MACHINE_IP>
-set RPORT <TARGET_SERVICE_PORT>
-check
-run
-```
 """
             # Create target directory if it does not exist
             os.makedirs(self.output_dir, exist_ok=True)

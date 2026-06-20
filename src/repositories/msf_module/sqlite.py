@@ -28,10 +28,18 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
             cursor = conn.cursor()
             cursor.execute(
                 """
-            INSERT OR REPLACE INTO msf_modules (
-                path, name, display_name, type, rank, disclosure_date, platform, documentation, description
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
-            """,
+                INSERT INTO msf_modules (
+                    path, name, display_name, type, rank, disclosure_date, documentation, description
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(path) DO UPDATE SET
+                    name = excluded.name,
+                    display_name = excluded.display_name,
+                    type = excluded.type,
+                    rank = excluded.rank,
+                    disclosure_date = excluded.disclosure_date,
+                    documentation = excluded.documentation,
+                    description = excluded.description;
+                """,
                 (
                     record.path,
                     record.name,
@@ -39,11 +47,18 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
                     record.type,
                     record.rank,
                     record.disclosure_date,
-                    json.dumps(record.platform),
                     record.documentation,
                     record.description,
                 ),
             )
+            for plat in record.platform:
+                cursor.execute(
+                    """
+                    INSERT OR IGNORE INTO module_platforms (module_path, platform)
+                    VALUES (?, ?);
+                    """,
+                    (record.path, plat),
+                )
             conn.commit()
         except Exception as e:
             self._logger.error(f"Error storing module metadata for {record.path}: {e}")
@@ -59,7 +74,7 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
             cursor = conn.cursor()
             cursor.execute(
                 """
-                SELECT id, path, name, display_name, type, rank, disclosure_date, platform, documentation, description
+                SELECT id, path, name, display_name, type, rank, disclosure_date, documentation, description
                 FROM msf_modules WHERE path = ?;
                 """,
                 (path,),
@@ -75,10 +90,18 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
                 m_type,
                 rank,
                 disclosure_date,
-                platform_raw,
                 doc,
                 desc,
             ) = row
+
+            cursor.execute(
+                """
+                SELECT platform FROM module_platforms WHERE module_path = ?;
+                """,
+                (path,),
+            )
+            platforms = [r[0] for r in cursor.fetchall() if r[0]]
+
             return MSFModuleRecord(
                 id=m_id,
                 path=m_path,
@@ -87,7 +110,7 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
                 type=m_type or "",
                 rank=rank or "",
                 disclosure_date=disclosure_date or "",
-                platform=json.loads(platform_raw) if platform_raw else [],
+                platform=platforms,
                 documentation=doc or "",
                 description=desc or "",
             )
@@ -149,29 +172,19 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
                 conn.close()
 
     def get_platform_distribution(self) -> List[Tuple[str, int]]:
-        from collections import Counter
-
         conn = None
         try:
             conn = self.db_manager.get_connection()
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT platform FROM msf_modules WHERE platform IS NOT NULL;"
+                """
+                SELECT platform, COUNT(*) as cnt
+                FROM module_platforms
+                GROUP BY platform
+                ORDER BY cnt DESC;
+                """
             )
-            rows = cursor.fetchall()
-            counter = Counter()
-            for row in rows:
-                if row[0]:
-                    try:
-                        plats = json.loads(row[0])
-                        if isinstance(plats, list):
-                            for p in plats:
-                                counter[p] += 1
-                        elif isinstance(plats, str):
-                            counter[plats] += 1
-                    except Exception:
-                        pass
-            return counter.most_common()
+            return cursor.fetchall()
         except Exception as e:
             self._logger.error(f"Error getting platform distribution: {e}")
             return []
@@ -218,12 +231,15 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
             conn = self.db_manager.get_connection()
             cursor = conn.cursor()
             query = """
-                SELECT m.id, m.path, m.name, m.display_name, m.type, m.rank, m.disclosure_date, m.platform, m.documentation, m.description,
+                SELECT m.id, m.path, m.name, m.display_name, m.type, m.rank, m.disclosure_date,
+                       (SELECT group_concat(platform) FROM module_platforms WHERE module_path = m.path) as platforms,
+                       m.documentation, m.description,
                        s.id as software_id, s.name as software_name, s.cves, s.vulnerable_versions, s.required_configs,
-                       g.id as guideline_id, g.guideline, g.status
+                       g.id as guideline_id, g.guideline, g.status, g.platform as guideline_platform
                 FROM msf_modules m
                 LEFT JOIN software s ON m.path = s.path
-                LEFT JOIN vm_guidelines g ON m.path = g.path
+                LEFT JOIN module_guidelines mg ON m.path = mg.module_path
+                LEFT JOIN vm_guidelines g ON mg.guideline_id = g.id
                 WHERE 1=1
             """
             params = []
@@ -232,7 +248,7 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
                 query += " AND s.name LIKE ?"
                 params.append(sql_pattern)
             if platform:
-                query += " AND m.platform LIKE ?"
+                query += " AND EXISTS (SELECT 1 FROM module_platforms WHERE module_path = m.path AND platform LIKE ?)"
                 params.append(f"%{platform}%")
             if rank:
                 query += " AND m.rank LIKE ?"
@@ -263,6 +279,7 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
                     guideline_id,
                     guideline,
                     status,
+                    guideline_platform,
                 ) = row
 
                 m_rec = MSFModuleRecord(
@@ -273,7 +290,7 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
                     type=mtype or "",
                     rank=l_rank or "",
                     disclosure_date=disclosure_date or "",
-                    platform=json.loads(plat_raw) if plat_raw else [],
+                    platform=plat_raw.split(",") if plat_raw else [],
                     documentation=doc or "",
                     description=desc or "",
                 )
@@ -298,6 +315,7 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
                         path=m_path,
                         guideline=guideline,
                         status=status or "UNVERIFIED",
+                        platform=guideline_platform or "",
                     )
 
                 records.append((m_rec, s_rec, g_rec))

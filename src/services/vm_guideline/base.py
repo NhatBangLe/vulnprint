@@ -16,9 +16,16 @@ class VMGuidelineService(ABC):
         pass
 
     @abstractmethod
-    def get_vm_guideline(self, msf_path: str) -> Optional[VMGuideline]:
+    def get_vm_guideline(self, guideline_id: int) -> Optional[VMGuideline]:
         """
         Retrieves database DTO record and converts/returns a domain model.
+        """
+        pass
+
+    @abstractmethod
+    def get_vm_guideline_by_path(self, msf_path: str) -> List[VMGuideline]:
+        """
+        Retrieves database DTO records by path and converts/returns domain models.
         """
         pass
 

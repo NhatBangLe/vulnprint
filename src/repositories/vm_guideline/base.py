@@ -16,9 +16,16 @@ class VMGuidelineRepository(ABC):
         pass
 
     @abstractmethod
-    def get_vm_guideline(self, msf_path: str) -> Optional[VMGuidelineRecord]:
+    def get_vm_guideline(self, guideline_id: int) -> Optional[VMGuidelineRecord]:
         """
-        Retrieves a VM guideline for the given path.
+        Retrieves a VM guideline for the given ID.
+        """
+        pass
+
+    @abstractmethod
+    def get_vm_guideline_by_path(self, msf_path: str) -> List[VMGuidelineRecord]:
+        """
+        Retrieves all VM guidelines for the given path.
         """
         pass
 

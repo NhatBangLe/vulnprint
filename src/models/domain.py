@@ -74,9 +74,11 @@ class VMGuidelineStatus(Enum):
 
 
 class VMGuideline(BaseModel):
+    id: Optional[int] = None
     path: str
     guideline: str
     status: VMGuidelineStatus = VMGuidelineStatus.UNVERIFIED
+    platform: str = ""
 
     @classmethod
     def from_record(cls, record: VMGuidelineRecord) -> "VMGuideline":
@@ -95,7 +97,9 @@ class VMGuideline(BaseModel):
                 raise ValueError(f"Invalid status: {record.status}")
 
         return cls(
+            id=record.id,
             path=record.path,
             guideline=record.guideline,
             status=real_status,
+            platform=record.platform,
         )
