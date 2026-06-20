@@ -1,6 +1,6 @@
 from typing import List, Tuple, Optional
-from repositories import MSFModuleRepository, VulnerabilityRepository
-from models import MetasploitModuleDetails, MSFModuleRecord, VulnerabilityRecord
+from repositories import MSFModuleRepository, SoftwareRepository
+from models import MetasploitModuleDetails, MSFModuleRecord, SoftwareRecord
 from .base import MSFModuleService
 
 
@@ -10,10 +10,10 @@ class DefaultMSFModuleService(MSFModuleService):
     """
 
     def __init__(
-        self, msf_repo: MSFModuleRepository, vuln_repo: VulnerabilityRepository
+        self, msf_repo: MSFModuleRepository, software_repo: SoftwareRepository
     ):
         self.msf_repo = msf_repo
-        self.vuln_repo = vuln_repo
+        self.software_repo = software_repo
 
     def store_module_details(self, details: MetasploitModuleDetails) -> None:
         record = MSFModuleRecord(
@@ -29,25 +29,27 @@ class DefaultMSFModuleService(MSFModuleService):
         )
         self.msf_repo.store_module_metadata(record)
 
-        # Retrieve existing vulnerability record to keep versions & configs
-        existing = self.vuln_repo.get_vulnerability_details(details.module_name)
+        # Retrieve existing software record to keep name, versions & configs
+        existing = self.software_repo.get_software_details(details.module_name)
+        software_name = existing.name if existing else ""
         versions = existing.vulnerable_versions if existing else []
         configs = existing.required_configs if existing else []
 
-        vuln_rec = VulnerabilityRecord(
+        software_rec = SoftwareRecord(
             path=details.module_name,
+            name=software_name,
             cves=details.cves,
             vulnerable_versions=versions,
             required_configs=configs,
         )
-        self.vuln_repo.store_vulnerability_details(vuln_rec)
+        self.software_repo.store_software_details(software_rec)
 
     def get_module_details(self, path: str) -> Optional[MetasploitModuleDetails]:
         msf_rec = self.msf_repo.get_module_metadata(path)
         if not msf_rec:
             return None
-        vuln_rec = self.vuln_repo.get_vulnerability_details(path)
-        return MetasploitModuleDetails.from_record(msf_rec, vuln_rec)
+        software_rec = self.software_repo.get_software_details(path)
+        return MetasploitModuleDetails.from_record(msf_rec, software_rec)
 
     def get_all_paths(self) -> List[str]:
         return self.msf_repo.get_all_paths()
@@ -74,6 +76,6 @@ class DefaultMSFModuleService(MSFModuleService):
             software_pattern=software_pattern, platform=platform, rank=rank
         )
         results = []
-        for m_rec, s_rec, v_rec, g_rec in joined_records:
-            results.append(MetasploitModuleDetails.from_record(m_rec, v_rec))
+        for m_rec, s_rec, g_rec in joined_records:
+            results.append(MetasploitModuleDetails.from_record(m_rec, s_rec))
         return results

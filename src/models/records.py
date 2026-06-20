@@ -3,6 +3,7 @@ from pydantic import BaseModel, Field
 
 
 class MSFModuleRecord(BaseModel):
+    id: Optional[int] = None
     path: str
     name: str
     display_name: str = ""
@@ -14,19 +15,17 @@ class MSFModuleRecord(BaseModel):
     description: str = ""
 
 
-class SoftwareMetadataRecord(BaseModel):
+class SoftwareRecord(BaseModel):
+    id: Optional[int] = None
     path: str
-    name: str
-
-
-class VulnerabilityRecord(BaseModel):
-    path: str
+    name: str = ""
     cves: List[str] = Field(default_factory=list)
     vulnerable_versions: List[str] = Field(default_factory=list)
     required_configs: List[str] = Field(default_factory=list)
 
 
 class VMGuidelineRecord(BaseModel):
+    id: Optional[int] = None
     path: str
     guideline: str
     status: str = "UNVERIFIED"

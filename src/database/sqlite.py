@@ -42,35 +42,23 @@ class SQLiteDatabaseManager(DatabaseManager):
             """
             )
 
-            # 2. software_metadata table
+            # 2. software table
             cursor.execute(
                 """
-            CREATE TABLE IF NOT EXISTS software_metadata (
+            CREATE TABLE IF NOT EXISTS software (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 path TEXT UNIQUE NOT NULL,
                 name TEXT NOT NULL,
+                cves TEXT,
+                vulnerable_versions TEXT,
+                required_configs TEXT,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (path) REFERENCES msf_modules(path) ON DELETE CASCADE
             );
             """
             )
 
-            # 3. vulnerabilities table
-            cursor.execute(
-                """
-            CREATE TABLE IF NOT EXISTS vulnerabilities (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                path TEXT UNIQUE NOT NULL,
-                cves TEXT,
-                vulnerable_versions TEXT,
-                required_configs TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (path) REFERENCES software_metadata(path) ON DELETE CASCADE
-            );
-            """
-            )
-
-            # 4. vm_guidelines table
+            # 3. vm_guidelines table
             cursor.execute(
                 """
             CREATE TABLE IF NOT EXISTS vm_guidelines (

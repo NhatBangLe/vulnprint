@@ -7,7 +7,17 @@ from .domain import (
 )
 from .records import (
     MSFModuleRecord,
-    SoftwareMetadataRecord,
-    VulnerabilityRecord,
+    SoftwareRecord,
     VMGuidelineRecord,
 )
+
+__all__ = [
+    "CLIArguments",
+    "MetasploitModuleDetails",
+    "VulnerabilityTarget",
+    "VMGuideline",
+    "VMGuidelineStatus",
+    "MSFModuleRecord",
+    "SoftwareRecord",
+    "VMGuidelineRecord",
+]

@@ -3,8 +3,7 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 from .records import (
     MSFModuleRecord,
-    SoftwareMetadataRecord,
-    VulnerabilityRecord,
+    SoftwareRecord,
     VMGuidelineRecord,
 )
 
@@ -22,14 +21,14 @@ class MetasploitModuleDetails(BaseModel):
 
     @classmethod
     def from_record(
-        cls, msf_rec: MSFModuleRecord, vuln_rec: Optional[VulnerabilityRecord] = None
+        cls, msf_rec: MSFModuleRecord, software_rec: Optional[SoftwareRecord] = None
     ) -> "MetasploitModuleDetails":
         """
-        Maps an MSFModuleRecord and optional VulnerabilityRecord to MetasploitModuleDetails.
+        Maps an MSFModuleRecord and optional SoftwareRecord to MetasploitModuleDetails.
         """
         return cls(
             description=msf_rec.description,
-            cves=vuln_rec.cves if vuln_rec else [],
+            cves=software_rec.cves if software_rec else [],
             type=msf_rec.type,
             name=msf_rec.display_name,
             module_name=msf_rec.name,
@@ -54,18 +53,17 @@ class VulnerabilityTarget(BaseModel):
     )
 
     @classmethod
-    def from_records(
+    def from_record(
         cls,
-        software_rec: SoftwareMetadataRecord,
-        vuln_rec: Optional[VulnerabilityRecord] = None,
+        software_rec: SoftwareRecord,
     ) -> "VulnerabilityTarget":
         """
-        Maps a SoftwareMetadataRecord and optional VulnerabilityRecord to VulnerabilityTarget.
+        Maps a SoftwareRecord to VulnerabilityTarget.
         """
         return cls(
             software_name=software_rec.name,
-            vulnerable_versions=vuln_rec.vulnerable_versions if vuln_rec else [],
-            required_configs=vuln_rec.required_configs if vuln_rec else [],
+            vulnerable_versions=software_rec.vulnerable_versions,
+            required_configs=software_rec.required_configs,
         )
 
 

@@ -5,8 +5,7 @@ from typing import List, Optional, Tuple
 from .base import MSFModuleRepository
 from models import (
     MSFModuleRecord,
-    SoftwareMetadataRecord,
-    VulnerabilityRecord,
+    SoftwareRecord,
     VMGuidelineRecord,
 )
 
@@ -60,7 +59,7 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
             cursor = conn.cursor()
             cursor.execute(
                 """
-                SELECT path, name, display_name, type, rank, disclosure_date, platform, documentation, description
+                SELECT id, path, name, display_name, type, rank, disclosure_date, platform, documentation, description
                 FROM msf_modules WHERE path = ?;
                 """,
                 (path,),
@@ -69,6 +68,7 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
             if not row:
                 return None
             (
+                m_id,
                 m_path,
                 m_name,
                 display_name,
@@ -80,6 +80,7 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
                 desc,
             ) = row
             return MSFModuleRecord(
+                id=m_id,
                 path=m_path,
                 name=m_name or "",
                 display_name=display_name or "",
@@ -208,8 +209,7 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
     ) -> List[
         Tuple[
             MSFModuleRecord,
-            Optional[SoftwareMetadataRecord],
-            Optional[VulnerabilityRecord],
+            Optional[SoftwareRecord],
             Optional[VMGuidelineRecord],
         ]
     ]:
@@ -218,13 +218,11 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
             conn = self.db_manager.get_connection()
             cursor = conn.cursor()
             query = """
-                SELECT m.path, m.name, m.display_name, m.type, m.rank, m.disclosure_date, m.platform, m.documentation, m.description,
-                       s.name as software_name,
-                       v.cves, v.vulnerable_versions, v.required_configs,
-                       g.guideline, g.status
+                SELECT m.id, m.path, m.name, m.display_name, m.type, m.rank, m.disclosure_date, m.platform, m.documentation, m.description,
+                       s.id as software_id, s.name as software_name, s.cves, s.vulnerable_versions, s.required_configs,
+                       g.id as guideline_id, g.guideline, g.status
                 FROM msf_modules m
-                LEFT JOIN software_metadata s ON m.path = s.path
-                LEFT JOIN vulnerabilities v ON m.path = v.path
+                LEFT JOIN software s ON m.path = s.path
                 LEFT JOIN vm_guidelines g ON m.path = g.path
                 WHERE 1=1
             """
@@ -247,6 +245,7 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
             records = []
             for row in rows:
                 (
+                    m_id,
                     m_path,
                     m_name,
                     display_name,
@@ -256,15 +255,18 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
                     plat_raw,
                     doc,
                     desc,
+                    software_id,
                     software_name,
                     cves_raw,
                     versions_raw,
                     configs_raw,
+                    guideline_id,
                     guideline,
                     status,
                 ) = row
 
                 m_rec = MSFModuleRecord(
+                    id=m_id,
                     path=m_path,
                     name=m_name or "",
                     display_name=display_name or "",
@@ -277,13 +279,11 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
                 )
 
                 s_rec = None
-                if software_name:
-                    s_rec = SoftwareMetadataRecord(path=m_path, name=software_name)
-
-                v_rec = None
-                if cves_raw or versions_raw or configs_raw:
-                    v_rec = VulnerabilityRecord(
+                if software_name or cves_raw or versions_raw or configs_raw:
+                    s_rec = SoftwareRecord(
+                        id=software_id,
                         path=m_path,
+                        name=software_name or "",
                         cves=json.loads(cves_raw) if cves_raw else [],
                         vulnerable_versions=(
                             json.loads(versions_raw) if versions_raw else []
@@ -294,12 +294,13 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
                 g_rec = None
                 if guideline:
                     g_rec = VMGuidelineRecord(
+                        id=guideline_id,
                         path=m_path,
                         guideline=guideline,
                         status=status or "UNVERIFIED",
                     )
 
-                records.append((m_rec, s_rec, v_rec, g_rec))
+                records.append((m_rec, s_rec, g_rec))
             return records
         except Exception as e:
             self._logger.error(f"Error searching joined modules: {e}")

@@ -11,8 +11,7 @@ from models import (
 from services.metasploit import MetasploitRPCService
 from repositories import (
     SQLiteMSFModuleRepository,
-    SQLiteSoftwareMetadataRepository,
-    SQLiteVulnerabilityRepository,
+    SQLiteSoftwareRepository,
     SQLiteVMGuidelineRepository,
 )
 from database import SQLiteDatabaseManager
@@ -139,14 +138,13 @@ def setup_database_and_services(db_path: str):
 
     # Instantiate repositories
     msf_repo = SQLiteMSFModuleRepository(db_manager=db_manager)
-    software_repo = SQLiteSoftwareMetadataRepository(db_manager=db_manager)
-    vuln_repo = SQLiteVulnerabilityRepository(db_manager=db_manager)
+    software_repo = SQLiteSoftwareRepository(db_manager=db_manager)
     guide_repo = SQLiteVMGuidelineRepository(db_manager=db_manager)
 
     # Wrap repositories in Domain Services
-    msf_service = DefaultMSFModuleService(msf_repo=msf_repo, vuln_repo=vuln_repo)
+    msf_service = DefaultMSFModuleService(msf_repo=msf_repo, software_repo=software_repo)
     vuln_service = DefaultVulnerabilityTargetService(
-        software_repo=software_repo, vuln_repo=vuln_repo
+        software_repo=software_repo
     )
     guide_service = DefaultVMGuidelineService(guide_repo=guide_repo)
 

@@ -46,18 +46,19 @@ class SQLiteVMGuidelineRepository(VMGuidelineRepository):
             conn = self.db_manager.get_connection()
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT path, guideline, status, created_at, updated_at FROM vm_guidelines WHERE path = ?;",
+                "SELECT id, path, guideline, status, created_at, updated_at FROM vm_guidelines WHERE path = ?;",
                 (msf_path,),
             )
             row = cursor.fetchone()
             if not row:
                 return None
             return VMGuidelineRecord(
-                path=row[0],
-                guideline=row[1],
-                status=row[2],
-                created_at=row[3],
-                updated_at=row[4],
+                id=row[0],
+                path=row[1],
+                guideline=row[2],
+                status=row[3],
+                created_at=row[4],
+                updated_at=row[5],
             )
         except Exception as e:
             self._logger.error(f"Error retrieving VM guideline for {msf_path}: {e}")
@@ -73,7 +74,7 @@ class SQLiteVMGuidelineRepository(VMGuidelineRepository):
             cursor = conn.cursor()
             cursor.execute(
                 """
-                SELECT path, guideline, status, created_at, updated_at
+                SELECT id, path, guideline, status, created_at, updated_at
                 FROM vm_guidelines
                 WHERE status = 'UNVERIFIED'
                 ORDER BY created_at ASC;
@@ -84,11 +85,12 @@ class SQLiteVMGuidelineRepository(VMGuidelineRepository):
             for row in rows:
                 results.append(
                     VMGuidelineRecord(
-                        path=row[0],
-                        guideline=row[1],
-                        status=row[2],
-                        created_at=row[3],
-                        updated_at=row[4],
+                        id=row[0],
+                        path=row[1],
+                        guideline=row[2],
+                        status=row[3],
+                        created_at=row[4],
+                        updated_at=row[5],
                     )
                 )
             return results

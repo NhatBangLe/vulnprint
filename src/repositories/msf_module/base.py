@@ -2,8 +2,7 @@ from abc import ABC, abstractmethod
 from typing import List, Optional, Tuple
 from models import (
     MSFModuleRecord,
-    SoftwareMetadataRecord,
-    VulnerabilityRecord,
+    SoftwareRecord,
     VMGuidelineRecord,
 )
 
@@ -71,13 +70,12 @@ class MSFModuleRepository(ABC):
     ) -> List[
         Tuple[
             MSFModuleRecord,
-            Optional[SoftwareMetadataRecord],
-            Optional[VulnerabilityRecord],
+            Optional[SoftwareRecord],
             Optional[VMGuidelineRecord],
         ]
     ]:
         """
-        Searches modules joining software, vulnerability, and guideline tables.
+        Searches modules joining software and guideline tables.
         Returns a list of tuples containing records.
         """
         pass
