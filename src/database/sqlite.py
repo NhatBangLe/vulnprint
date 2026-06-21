@@ -69,21 +69,39 @@ class SQLiteDatabaseManager(DatabaseManager):
             """
             )
 
-            # 3. vm_guidelines table
+            # 3. os_guidelines table
             cursor.execute(
                 """
-            CREATE TABLE IF NOT EXISTS vm_guidelines (
+            CREATE TABLE IF NOT EXISTS os_guidelines (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                os_name TEXT UNIQUE NOT NULL,
                 guideline TEXT NOT NULL,
-                status TEXT DEFAULT 'UNVERIFIED',
                 platform TEXT,
+                status TEXT DEFAULT 'UNVERIFIED',
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
             );
             """
             )
 
-            # 4. module_guidelines table
+            # 4. software_guidelines table
+            cursor.execute(
+                """
+            CREATE TABLE IF NOT EXISTS software_guidelines (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guideline TEXT NOT NULL,
+                os_guideline_id INTEGER NOT NULL,
+                software_id INTEGER NOT NULL,
+                status TEXT DEFAULT 'UNVERIFIED',
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (os_guideline_id) REFERENCES os_guidelines(id) ON DELETE CASCADE,
+                FOREIGN KEY (software_id) REFERENCES software(id) ON DELETE CASCADE
+            );
+            """
+            )
+
+            # 5. module_guidelines table
             cursor.execute(
                 """
             CREATE TABLE IF NOT EXISTS module_guidelines (
@@ -91,7 +109,7 @@ class SQLiteDatabaseManager(DatabaseManager):
                 guideline_id INTEGER NOT NULL,
                 PRIMARY KEY (module_path, guideline_id),
                 FOREIGN KEY (module_path) REFERENCES msf_modules(path) ON DELETE CASCADE,
-                FOREIGN KEY (guideline_id) REFERENCES vm_guidelines(id) ON DELETE CASCADE
+                FOREIGN KEY (guideline_id) REFERENCES software_guidelines(id) ON DELETE CASCADE
             );
             """
             )

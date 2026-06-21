@@ -4,7 +4,8 @@ from pydantic import BaseModel, Field
 from .records import (
     MSFModuleRecord,
     SoftwareRecord,
-    VMGuidelineRecord,
+    OSGuidelineRecord,
+    SoftwareGuidelineRecord,
 )
 
 
@@ -73,32 +74,65 @@ class VulnerabilityTarget(BaseModel):
         )
 
 
-class VMGuidelineStatus(Enum):
+class GuidelineStatus(Enum):
     UNVERIFIED = "UNVERIFIED"
     REJECTED = "REJECTED"
     VERIFIED = "VERIFIED"
 
 
-class VMGuideline(BaseModel):
+class OSGuideline(BaseModel):
     id: Optional[int] = None
-    path: str
+    os_name: str
     guideline: str
-    status: VMGuidelineStatus = VMGuidelineStatus.UNVERIFIED
+    status: GuidelineStatus = GuidelineStatus.UNVERIFIED
     platform: str = ""
 
     @classmethod
-    def from_record(cls, record: VMGuidelineRecord) -> "VMGuideline":
+    def from_record(cls, record: OSGuidelineRecord) -> "OSGuideline":
         """
-        Maps a VMGuidelineRecord to VMGuideline.
+        Maps an OSGuidelineRecord to OSGuideline.
         """
-        real_status: VMGuidelineStatus
+        real_status: GuidelineStatus
         match record.status:
-            case VMGuidelineStatus.UNVERIFIED.value:
-                real_status = VMGuidelineStatus.UNVERIFIED
-            case VMGuidelineStatus.REJECTED.value:
-                real_status = VMGuidelineStatus.REJECTED
-            case VMGuidelineStatus.VERIFIED.value:
-                real_status = VMGuidelineStatus.VERIFIED
+            case GuidelineStatus.UNVERIFIED.value:
+                real_status = GuidelineStatus.UNVERIFIED
+            case GuidelineStatus.REJECTED.value:
+                real_status = GuidelineStatus.REJECTED
+            case GuidelineStatus.VERIFIED.value:
+                real_status = GuidelineStatus.VERIFIED
+            case _:
+                raise ValueError(f"Invalid status: {record.status}")
+
+        return cls(
+            id=record.id,
+            os_name=record.os_name,
+            guideline=record.guideline,
+            status=real_status,
+            platform=record.platform,
+        )
+
+
+class SoftwareGuideline(BaseModel):
+    id: Optional[int] = None
+    path: str = ""
+    guideline: str
+    os_guideline_id: int
+    software_id: int
+    status: GuidelineStatus = GuidelineStatus.UNVERIFIED
+
+    @classmethod
+    def from_record(cls, record: SoftwareGuidelineRecord) -> "SoftwareGuideline":
+        """
+        Maps a SoftwareGuidelineRecord to SoftwareGuideline.
+        """
+        real_status: GuidelineStatus
+        match record.status:
+            case GuidelineStatus.UNVERIFIED.value:
+                real_status = GuidelineStatus.UNVERIFIED
+            case GuidelineStatus.REJECTED.value:
+                real_status = GuidelineStatus.REJECTED
+            case GuidelineStatus.VERIFIED.value:
+                real_status = GuidelineStatus.VERIFIED
             case _:
                 raise ValueError(f"Invalid status: {record.status}")
 
@@ -106,8 +140,9 @@ class VMGuideline(BaseModel):
             id=record.id,
             path=record.path,
             guideline=record.guideline,
+            os_guideline_id=record.os_guideline_id,
+            software_id=record.software_id,
             status=real_status,
-            platform=record.platform,
         )
 
 

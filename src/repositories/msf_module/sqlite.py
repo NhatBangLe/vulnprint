@@ -6,7 +6,8 @@ from .base import MSFModuleRepository
 from models import (
     MSFModuleRecord,
     SoftwareRecord,
-    VMGuidelineRecord,
+    OSGuidelineRecord,
+    SoftwareGuidelineRecord,
 )
 
 
@@ -223,7 +224,8 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
         Tuple[
             MSFModuleRecord,
             Optional[SoftwareRecord],
-            Optional[VMGuidelineRecord],
+            Optional[SoftwareGuidelineRecord],
+            Optional[OSGuidelineRecord],
         ]
     ]:
         conn = None
@@ -235,11 +237,13 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
                        (SELECT group_concat(platform) FROM module_platforms WHERE module_path = m.path) as platforms,
                        m.documentation, m.description,
                        s.id as software_id, s.name as software_name, s.cves, s.vulnerable_versions, s.required_configs,
-                       g.id as guideline_id, g.guideline, g.status, g.platform as guideline_platform
+                       sg.id as guideline_id, sg.guideline as software_guideline, sg.status, og.platform as guideline_platform,
+                       og.id as os_guideline_id, og.os_name, og.guideline as os_guideline
                 FROM msf_modules m
                 LEFT JOIN software s ON m.path = s.path
                 LEFT JOIN module_guidelines mg ON m.path = mg.module_path
-                LEFT JOIN vm_guidelines g ON mg.guideline_id = g.id
+                LEFT JOIN software_guidelines sg ON mg.guideline_id = sg.id
+                LEFT JOIN os_guidelines og ON sg.os_guideline_id = og.id
                 WHERE 1=1
             """
             params = []
@@ -277,9 +281,12 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
                     versions_raw,
                     configs_raw,
                     guideline_id,
-                    guideline,
+                    software_guideline,
                     status,
                     guideline_platform,
+                    os_guideline_id,
+                    os_name,
+                    os_guideline,
                 ) = row
 
                 m_rec = MSFModuleRecord(
@@ -308,17 +315,25 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
                         required_configs=json.loads(configs_raw) if configs_raw else [],
                     )
 
-                g_rec = None
-                if guideline:
-                    g_rec = VMGuidelineRecord(
+                sg_rec = None
+                og_rec = None
+                if guideline_id:
+                    sg_rec = SoftwareGuidelineRecord(
                         id=guideline_id,
-                        path=m_path,
-                        guideline=guideline,
+                        guideline=software_guideline or "",
+                        os_guideline_id=os_guideline_id,
+                        software_id=software_id,
                         status=status or "UNVERIFIED",
+                    )
+                    og_rec = OSGuidelineRecord(
+                        id=os_guideline_id,
+                        os_name=os_name or "",
+                        guideline=os_guideline or "",
                         platform=guideline_platform or "",
+                        status="VERIFIED",
                     )
 
-                records.append((m_rec, s_rec, g_rec))
+                records.append((m_rec, s_rec, sg_rec, og_rec))
             return records
         except Exception as e:
             self._logger.error(f"Error searching joined modules: {e}")

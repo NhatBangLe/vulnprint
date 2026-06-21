@@ -1,23 +1,31 @@
 import logging
 import asyncio
-from typing import Optional, List
+from typing import Optional, List, Tuple
 from pydantic import BaseModel, Field, ValidationError
 from langchain_core.tools import BaseTool
 from langchain_openai import ChatOpenAI
 from langchain.agents import create_agent
 from langchain.agents.middleware import ToolCallLimitMiddleware
 from services import MSFModuleService, VulnerabilityTargetService
-from models import VMGuideline, VMGuidelineStatus
+from models import OSGuideline, SoftwareGuideline, GuidelineStatus
 
 
 class VMGuidelineGeneratorResult(BaseModel):
     platform: str = Field(
         ...,
-        description="The target platform which you chose to build a VM for the Metasploit module.",
+        description="The target platform platform name, e.g. Linux, Windows.",
     )
-    guideline: str = Field(
+    os_name: str = Field(
         ...,
-        description="A detailed step-by-step VM Installation Guideline summarizing all installation instructions, requirements, and findings.",
+        description="The specific name and version of the Operating System chosen, e.g. 'Ubuntu 24.04 LTS', 'Windows 10'.",
+    )
+    os_guideline: str = Field(
+        ...,
+        description="A detailed step-by-step Operating System Installation Guideline, including VM requirements, download sources, and OS setup steps.",
+    )
+    software_guideline: str = Field(
+        ...,
+        description="A detailed step-by-step Software Installation Guideline for installing the vulnerable target software/version on the chosen OS.",
     )
 
 
@@ -59,16 +67,19 @@ class VMGuidelineGeneratorAgent:
                 "vulnerable packages, and virtual machine setups for a specific Metasploit module target. "
                 "You must locate where to download the legacy target, install steps, and system prerequisites. "
                 "Use the tools iteratively as needed up to the limit. Once you have enough information, "
-                "compile a highly practical, step-by-step VM Installation Guideline for this module target."
+                "compile a highly practical Operating System installation guide (for base VM setup) and "
+                "a separate Software installation guide (for setting up the vulnerable package) for this module target."
             ),
             response_format=VMGuidelineGeneratorResult,
         )
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def generate(self, msf_path: str) -> Optional[VMGuideline]:
+    def generate(
+        self, msf_path: str
+    ) -> Optional[Tuple[OSGuideline, SoftwareGuideline]]:
         """
         Synchronously communicates with tools, lets the LLM execute search queries,
-        and returns the synthesized guideline.
+        and returns the synthesized guidelines.
         """
         self._logger.info(
             f"Starting agentic guideline generation workflow for module: {msf_path}"
@@ -100,7 +111,7 @@ class VMGuidelineGeneratorAgent:
 
         try:
             user_content = (
-                f"Generate a Virtual Machine Installation Guideline for this Metasploit module:\n"
+                f"Generate a Virtual Machine OS and Software Installation Guideline for this Metasploit module:\n"
                 f"Module Path: {msf_details.module_name}\n"
                 f"Associated CVEs: {cves_str}\n"
                 f"Software Target: {vuln_target.software_name}\n"
@@ -122,11 +133,19 @@ class VMGuidelineGeneratorAgent:
                     "Cannot parse VM Guideline Generator result from LLM output."
                 )
                 return None
-            return VMGuideline(
-                path=msf_path,
-                guideline=parsed_content.guideline,
-                platform=parsed_content.platform,
-                status=VMGuidelineStatus.UNVERIFIED,
+            return (
+                OSGuideline(
+                    os_name=parsed_content.os_name,
+                    guideline=parsed_content.os_guideline,
+                    platform=parsed_content.platform,
+                    status=GuidelineStatus.UNVERIFIED,
+                ),
+                SoftwareGuideline(
+                    guideline=parsed_content.software_guideline,
+                    os_guideline_id=0,
+                    software_id=0,
+                    status=GuidelineStatus.UNVERIFIED,
+                ),
             )
         except ValidationError as e:
             self._logger.error(f"Validation error: {e}")

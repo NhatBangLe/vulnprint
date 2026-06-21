@@ -1,10 +1,15 @@
 import os
 import logging
 import json
-from typing import Optional
+from typing import Optional, List
 from .base import BlueprintService
-from services import MSFModuleService, VulnerabilityTargetService, VMGuidelineService
-from models import VulnerabilityTarget, VMGuidelineStatus
+from services import (
+    MSFModuleService,
+    VulnerabilityTargetService,
+    OSGuidelineService,
+    SoftwareGuidelineService,
+)
+from models import VulnerabilityTarget, GuidelineStatus
 from agents import VMGuidelineGeneratorAgent
 
 
@@ -17,14 +22,16 @@ class MarkdownBlueprintService(BlueprintService):
         self,
         msf_service: MSFModuleService,
         vuln_service: VulnerabilityTargetService,
-        guide_service: VMGuidelineService,
+        os_guide_service: OSGuidelineService,
+        sw_guide_service: SoftwareGuidelineService,
         vm_guideline_generator_agent: VMGuidelineGeneratorAgent,
         output_dir: str = "vulnprint_blueprints/",
     ):
         self.msf_service = msf_service
         self.vuln_service = vuln_service
         self.output_dir = output_dir
-        self.guide_service = guide_service
+        self.os_guide_service = os_guide_service
+        self.sw_guide_service = sw_guide_service
         self.vm_guideline_generator_agent = vm_guideline_generator_agent
         self._logger = logging.getLogger(self.__class__.__name__)
 
@@ -48,116 +55,175 @@ class MarkdownBlueprintService(BlueprintService):
             software_name = vuln_target.software_name
             vulnerable_versions = vuln_target.vulnerable_versions
             required_configs = vuln_target.required_configs
+            os_guideline_text: Optional[str] = None
+            software_guideline_text: Optional[str] = None
+            os_name: str = "Unknown OS"
 
-            # Format strings for insertion into template
-            cves_str = ", ".join(cves) if cves else "N/A"
-
-            # Insert vulnerable versions as JSON array string or format nicely
-            versions_str = (
-                json.dumps(vulnerable_versions) if vulnerable_versions else "[]"
+            # Retrieve Software guidelines from VM Guideline Service
+            self._logger.info(f"Querying Software guideline for {msf_path}")
+            sw_guidelines = self.sw_guide_service.get_software_guidelines_by_path(
+                msf_path
             )
-
-            # Format pre-requisites configuration rules as a step-by-step numbered list
-            if required_configs:
-                configs_str = "\n".join(
-                    f"{i}. {config}" for i, config in enumerate(required_configs, 1)
-                )
-            else:
-                configs_str = "1. No special pre-requisite configurations identified."
-
-            # Retrieve VM guideline from VM Guideline Service
-            self._logger.info(f"Querying VM guideline for {msf_path}")
-            vm_guidelines = self.guide_service.get_vm_guideline_by_path(msf_path)
-            if vm_guidelines:
+            if sw_guidelines:
                 verified_guide = next(
-                    (
-                        g
-                        for g in vm_guidelines
-                        if g.status == VMGuidelineStatus.VERIFIED
-                    ),
+                    (g for g in sw_guidelines if g.status == GuidelineStatus.VERIFIED),
                     None,
                 )
-                if verified_guide:
-                    setup_instructions = verified_guide.guideline
-                else:
-                    setup_instructions = vm_guidelines[0].guideline
+                selected_sw_guide = (
+                    verified_guide if verified_guide else sw_guidelines[0]
+                )
+                software_guideline_text = selected_sw_guide.guideline
+
+                # Fetch corresponding OS Guideline
+                os_guide = self.os_guide_service.get_os_guideline(
+                    selected_sw_guide.os_guideline_id
+                )
+                if os_guide:
+                    os_guideline_text = os_guide.guideline
+                    os_name = os_guide.os_name
             else:
                 self._logger.info(
                     f"Guideline for {msf_path} not directly found. Searching for suitable existing guideline..."
                 )
-                suitable_guide = self.guide_service.find_suitable_guideline(
+                potential_guides = self.sw_guide_service.find_all_potential_guidelines(
                     platform=msf_details.platform,
                     software_name=software_name,
                     vulnerable_versions=vulnerable_versions,
                 )
-                if suitable_guide:
+                if potential_guides:
                     self._logger.info(
-                        f"Found suitable existing guideline (ID: {suitable_guide.id}) covering "
+                        f"Found {len(potential_guides)} suitable existing guideline(s) covering "
                         f"software '{software_name}'. Linking to {msf_path}."
                     )
-                    self.guide_service.link_guideline_to_module(
-                        msf_path, suitable_guide.id
+                    # Link to all suitable guides
+                    for _, guideline in potential_guides:
+                        self.sw_guide_service.link_guideline_to_module(
+                            msf_path, guideline.id
+                        )
+                    highest_score_guide = max(potential_guides, key=lambda x: x[0])[1]
+                    software_guideline_text = highest_score_guide.guideline
+                    os_guide = self.os_guide_service.get_os_guideline(
+                        highest_score_guide.os_guideline_id
                     )
-                    setup_instructions = suitable_guide.guideline
+                    if os_guide:
+                        os_guideline_text = os_guide.guideline
+                        os_name = os_guide.os_name
                 else:
                     self._logger.warning(
                         f"No suitable guideline found in database for {msf_path}. Regenerating using AI Agent..."
                     )
-                    vm_guideline = self.vm_guideline_generator_agent.generate(msf_path)
-                    if vm_guideline:
-                        self.guide_service.store_vm_guideline(vm_guideline)
-                        self._logger.info(
-                            f"Stored the newly generated VM guideline for {msf_path}"
+                    generated = self.vm_guideline_generator_agent.generate(msf_path)
+                    if generated:
+                        os_guide, sw_guide = generated
+                        # 1. Store OS Guideline and get its ID
+                        os_guideline_id = self.os_guide_service.store_os_guideline(
+                            os_guide
                         )
-                        setup_instructions = vm_guideline.guideline
+
+                        # 2. Update software guideline fields and store it
+                        sw_guide.os_guideline_id = os_guideline_id
+                        sw_guide.software_id = (
+                            vuln_target.id if vuln_target and vuln_target.id else 1
+                        )
+
+                        self.sw_guide_service.store_software_guideline(
+                            sw_guide, msf_path
+                        )
+                        self._logger.info(
+                            f"Stored the newly generated OS and Software guidelines for {msf_path}"
+                        )
+                        os_guideline_text = os_guide.guideline
+                        os_name = os_guide.os_name
+                        software_guideline_text = sw_guide.guideline
                     else:
                         self._logger.error(
                             f"Failed to generate guideline for {msf_path}. Using fallback instructions."
                         )
-                        setup_instructions = (
-                            "1. Download the specific legacy target executable or system binary package matching the versions identified above directly from standard open historical software archives.\n"
-                            "2. Initialize a local, network-isolated virtual machine or manual container image environment.\n"
-                            '3. Apply the environment parameters specified within the "Configuration Rules" section above.\n'
-                            "4. Verify local port binding allocations using standard troubleshooting utilities (`netstat`, `ss`, or `lsof`)."
-                        )
 
             # Build the exact template layout required
-            template = f"""# 📄 Lab Blueprint Manual: {software_name}
+            template = self._build_markdown_template(
+                msf_path=msf_path,
+                cves=cves,
+                vulnerable_versions=vulnerable_versions,
+                required_configs=required_configs,
+                os_name=os_name,
+                os_guideline=os_guideline_text,
+                software_guideline=software_guideline_text,
+                software_name=software_name,
+            )
 
-## 🎯 Vulnerability Target Profile
-
-- **Metasploit Core Path:** `{msf_path}`
-- **Associated CVEs:** `{cves_str}`
-- **Identified Vulnerable Product Versions:** `{versions_str}`
-
-## ⚙️ Target System Pre-Requisites & Configuration Rules
-
-{configs_str}
-
-## 🛠️ Manual Lab Setup Instructions
-
-{setup_instructions}
-"""
-            # Create target directory if it does not exist
-            os.makedirs(self.output_dir, exist_ok=True)
-
-            # Determine appropriate filename
-            if cves:
-                # e.g., CVE-2020-1938.md
-                filename = f"{cves[0].upper().strip()}.md"
-            else:
-                # Fallback to sanitized msf_path
-                sanitized_path = msf_path.replace("/", "_").replace("\\", "_")
-                filename = f"{sanitized_path}.md"
-
-            full_filepath = os.path.join(self.output_dir, filename)
-
-            # Write to file
-            with open(full_filepath, "w", encoding="utf-8") as f:
-                f.write(template)
-
-            return full_filepath
+            return self._export_blueprint_file(
+                template=template, cves=cves, msf_path=msf_path
+            )
 
         except Exception as e:
             self._logger.error(f"Error generating blueprint manual for {msf_path}: {e}")
             return None
+
+    def _export_blueprint_file(self, template: str, cves: List[str], msf_path: str):
+        # Create target directory if it does not exist
+        os.makedirs(self.output_dir, exist_ok=True)
+
+        # Determine appropriate filename
+        if cves:
+            # e.g., CVE-2020-1938.md
+            filename = f"{cves[0].upper().strip()}.md"
+        else:
+            # Fallback to sanitized msf_path
+            sanitized_path = msf_path.replace("/", "_").replace("\\", "_")
+            filename = f"{sanitized_path}.md"
+
+        full_filepath = os.path.join(self.output_dir, filename)
+
+        # Write to file
+        with open(full_filepath, "w", encoding="utf-8") as f:
+            f.write(template)
+
+        return full_filepath
+
+    def _build_markdown_template(
+        self,
+        msf_path: str,
+        cves: List[str],
+        vulnerable_versions: List[str],
+        required_configs: List[str],
+        os_name: str,
+        os_guideline: Optional[str],
+        software_guideline: Optional[str],
+        software_name: str,
+    ):
+        cves_str = ", ".join(cves) if cves else "N/A"
+        versions_str = json.dumps(vulnerable_versions) if vulnerable_versions else "[]"
+        configs_str = (
+            "\n".join(f"{i}. {config}" for i, config in enumerate(required_configs, 1))
+            if required_configs
+            else "No special pre-requisite configurations identified."
+        )
+
+        if os_guideline and software_guideline:
+            setup_block = (
+                f"### 🖥️ Operating System Setup ({os_name})\n"
+                f"{os_guideline}\n\n"
+                f"### 💿 Software Installation ({software_name})\n"
+                f"{software_guideline}"
+            )
+        else:
+            setup_block = (
+                "1. Download the specific legacy target executable or system binary package matching the versions identified above directly from standard open historical software archives.\n"
+                "2. Initialize a local, network-isolated virtual machine or manual container image environment.\n"
+                '3. Apply the environment parameters specified within the "Configuration Rules" section above.\n'
+                "4. Verify local port binding allocations using standard troubleshooting utilities (`netstat`, `ss`, or `lsof`)."
+            )
+
+        template = (
+            f"# 📄 Lab Blueprint Manual: {software_name}\n"
+            f"## 🎯 Vulnerability Target Profile\n"
+            f"- **Metasploit Core Path:** `{msf_path}`\n"
+            f"- **Associated CVEs:** `{cves_str}`\n"
+            f"- **Identified Vulnerable Product Versions:** `{versions_str}`\n"
+            f"## ⚙️ Target System Pre-Requisites & Configuration Rules\n"
+            f"{configs_str}\n"
+            f"## 🛠️ Manual Lab Setup Instructions\n"
+            f"{setup_block}\n"
+        )
+        return template

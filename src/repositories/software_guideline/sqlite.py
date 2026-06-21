@@ -1,30 +1,35 @@
-import json
 import logging
 from typing import List, Optional
-from .base import VMGuidelineRepository
-from models import VMGuidelineRecord, VMGuidelineMetadata
+from .base import SoftwareGuidelineRepository
+from models import SoftwareGuidelineRecord, VMGuidelineMetadata
 from database import DatabaseManager, SQLiteDatabaseManager
 
 
-class SQLiteVMGuidelineRepository(VMGuidelineRepository):
+class SQLiteSoftwareGuidelineRepository(SoftwareGuidelineRepository):
     def __init__(self, db_manager: DatabaseManager):
         if not isinstance(db_manager, SQLiteDatabaseManager):
-            raise TypeError("db_manager must be an instance of DatabaseManager")
+            raise TypeError("db_manager must be an instance of SQLiteDatabaseManager")
         self.db_manager: SQLiteDatabaseManager = db_manager
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def store_vm_guideline(self, record: VMGuidelineRecord) -> None:
+    def store_software_guideline(
+        self, record: SoftwareGuidelineRecord, path: str
+    ) -> int:
         conn = None
         try:
             conn = self.db_manager.get_connection()
             cursor = conn.cursor()
-
             cursor.execute(
                 """
-                INSERT INTO vm_guidelines (guideline, status, platform, created_at, updated_at)
-                VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+                INSERT INTO software_guidelines (guideline, os_guideline_id, software_id, status, created_at, updated_at)
+                VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
                 """,
-                (record.guideline, record.status, record.platform),
+                (
+                    record.guideline,
+                    record.os_guideline_id,
+                    record.software_id,
+                    record.status,
+                ),
             )
             guideline_id = cursor.lastrowid
             cursor.execute(
@@ -32,63 +37,69 @@ class SQLiteVMGuidelineRepository(VMGuidelineRepository):
                 INSERT INTO module_guidelines (module_path, guideline_id)
                 VALUES (?, ?);
                 """,
-                (record.path, guideline_id),
+                (path, guideline_id),
             )
             conn.commit()
+            return guideline_id
         except Exception as e:
-            self._logger.error(f"Error storing VM guideline for {record.path}: {e}")
+            self._logger.error(f"Error storing software guideline for {path}: {e}")
             raise
         finally:
             if conn:
                 conn.close()
 
-    def get_vm_guideline(self, guideline_id: int) -> Optional[VMGuidelineRecord]:
+    def get_software_guideline(
+        self, guideline_id: int
+    ) -> Optional[SoftwareGuidelineRecord]:
         conn = None
         try:
             conn = self.db_manager.get_connection()
             cursor = conn.cursor()
             cursor.execute(
                 """
-                SELECT g.id, mg.module_path, g.guideline, g.status, g.platform, g.created_at, g.updated_at
-                FROM vm_guidelines g
-                LEFT JOIN module_guidelines mg ON g.id = mg.guideline_id
-                WHERE g.id = ?;
+                SELECT sg.id, sg.guideline, sg.os_guideline_id, sg.software_id, sg.status, mg.module_path, sg.created_at, sg.updated_at
+                FROM software_guidelines sg
+                LEFT JOIN module_guidelines mg ON sg.id = mg.guideline_id
+                WHERE sg.id = ?;
                 """,
                 (guideline_id,),
             )
             row = cursor.fetchone()
             if not row:
                 return None
-            return VMGuidelineRecord(
+            return SoftwareGuidelineRecord(
                 id=row[0],
-                path=row[1] or "",
-                guideline=row[2],
-                status=row[3],
-                platform=row[4] or "",
-                created_at=row[5],
-                updated_at=row[6],
+                path=row[5] or "",
+                guideline=row[1],
+                os_guideline_id=row[2],
+                software_id=row[3],
+                status=row[4] or "UNVERIFIED",
+                created_at=row[6],
+                updated_at=row[7],
             )
         except Exception as e:
             self._logger.error(
-                f"Error retrieving VM guideline for ID {guideline_id}: {e}"
+                f"Error retrieving software guideline for ID {guideline_id}: {e}"
             )
             return None
         finally:
             if conn:
                 conn.close()
 
-    def get_vm_guideline_by_path(self, msf_path: str) -> List[VMGuidelineRecord]:
+    def get_software_guidelines_by_path(
+        self, msf_path: str
+    ) -> List[SoftwareGuidelineRecord]:
         conn = None
         try:
             conn = self.db_manager.get_connection()
             cursor = conn.cursor()
             cursor.execute(
                 """
-                SELECT g.id, mg.module_path, g.guideline, g.status, g.platform, g.created_at, g.updated_at
-                FROM vm_guidelines g
-                JOIN module_guidelines mg ON g.id = mg.guideline_id
+                SELECT sg.id, sg.guideline, sg.os_guideline_id, sg.software_id, sg.status, mg.module_path, sg.created_at, sg.updated_at
+                FROM software_guidelines sg
+                JOIN module_guidelines mg ON sg.id = mg.guideline_id
                 WHERE mg.module_path = ?
-                ORDER BY g.created_at DESC;
+                ORDER BY sg.created_at DESC;
                 """,
                 (msf_path,),
             )
@@ -96,50 +107,54 @@ class SQLiteVMGuidelineRepository(VMGuidelineRepository):
             results = []
             for row in rows:
                 results.append(
-                    VMGuidelineRecord(
+                    SoftwareGuidelineRecord(
                         id=row[0],
-                        path=row[1],
-                        guideline=row[2],
-                        status=row[3],
-                        platform=row[4] or "",
-                        created_at=row[5],
-                        updated_at=row[6],
+                        guideline=row[1],
+                        os_guideline_id=row[2],
+                        software_id=row[3],
+                        status=row[4] or "UNVERIFIED",
+                        path=row[5] or "",
+                        created_at=row[6],
+                        updated_at=row[7],
                     )
                 )
             return results
         except Exception as e:
-            self._logger.error(f"Error retrieving VM guidelines for {msf_path}: {e}")
+            self._logger.error(
+                f"Error retrieving software guidelines for {msf_path}: {e}"
+            )
             return []
         finally:
             if conn:
                 conn.close()
 
-    def get_unverified_guidelines(self) -> List[VMGuidelineRecord]:
+    def get_unverified_guidelines(self) -> List[SoftwareGuidelineRecord]:
         conn = None
         try:
             conn = self.db_manager.get_connection()
             cursor = conn.cursor()
             cursor.execute(
                 """
-                SELECT g.id, mg.module_path, g.guideline, g.status, g.platform, g.created_at, g.updated_at
-                FROM vm_guidelines g
-                JOIN module_guidelines mg ON g.id = mg.guideline_id
-                WHERE g.status = 'UNVERIFIED'
-                ORDER BY g.created_at ASC;
+                SELECT sg.id, sg.guideline, sg.os_guideline_id, sg.software_id, sg.status, mg.module_path, sg.created_at, sg.updated_at
+                FROM software_guidelines sg
+                LEFT JOIN module_guidelines mg ON sg.id = mg.guideline_id
+                WHERE sg.status = 'UNVERIFIED'
+                ORDER BY sg.created_at ASC;
                 """
             )
             rows = cursor.fetchall()
             results = []
             for row in rows:
                 results.append(
-                    VMGuidelineRecord(
+                    SoftwareGuidelineRecord(
                         id=row[0],
-                        path=row[1],
-                        guideline=row[2],
-                        status=row[3],
-                        platform=row[4] or "",
-                        created_at=row[5],
-                        updated_at=row[6],
+                        guideline=row[1],
+                        os_guideline_id=row[2],
+                        software_id=row[3],
+                        status=row[4] or "UNVERIFIED",
+                        path=row[5] or "",
+                        created_at=row[6],
+                        updated_at=row[7],
                     )
                 )
             return results
@@ -157,10 +172,13 @@ class SQLiteVMGuidelineRepository(VMGuidelineRepository):
         try:
             conn = self.db_manager.get_connection()
             cursor = conn.cursor()
-
-            # Find the latest guideline_id associated with this path
             cursor.execute(
-                "SELECT guideline_id FROM module_guidelines WHERE module_path = ? ORDER BY guideline_id DESC LIMIT 1;",
+                """
+                SELECT guideline_id 
+                FROM module_guidelines 
+                WHERE module_path = ? 
+                ORDER BY guideline_id DESC LIMIT 1;
+                """,
                 (msf_path,),
             )
             row = cursor.fetchone()
@@ -169,7 +187,7 @@ class SQLiteVMGuidelineRepository(VMGuidelineRepository):
                 if guideline is not None:
                     cursor.execute(
                         """
-                        UPDATE vm_guidelines 
+                        UPDATE software_guidelines 
                         SET status = ?, guideline = ?, updated_at = CURRENT_TIMESTAMP 
                         WHERE id = ?;
                         """,
@@ -178,7 +196,7 @@ class SQLiteVMGuidelineRepository(VMGuidelineRepository):
                 else:
                     cursor.execute(
                         """
-                        UPDATE vm_guidelines 
+                        UPDATE software_guidelines 
                         SET status = ?, updated_at = CURRENT_TIMESTAMP 
                         WHERE id = ?;
                         """,
@@ -238,9 +256,10 @@ class SQLiteVMGuidelineRepository(VMGuidelineRepository):
             # Get all guidelines, their linked modules, and software targets
             cursor.execute(
                 """
-                SELECT g.id, g.guideline, g.status, g.platform, mg.module_path, s.name, s.vulnerable_versions
-                FROM vm_guidelines g
-                LEFT JOIN module_guidelines mg ON g.id = mg.guideline_id
+                SELECT sg.id, sg.guideline, sg.status, og.platform, mg.module_path, s.name, s.vulnerable_versions
+                FROM software_guidelines sg
+                LEFT JOIN os_guidelines og ON sg.os_guideline_id = og.id
+                LEFT JOIN module_guidelines mg ON sg.id = mg.guideline_id
                 LEFT JOIN software s ON mg.module_path = s.path;
                 """
             )
@@ -283,6 +302,8 @@ class SQLiteVMGuidelineRepository(VMGuidelineRepository):
                         )
                     if s_vers_raw:
                         try:
+                            import json
+
                             versions = json.loads(s_vers_raw)
                             if isinstance(versions, list):
                                 g_entry["associated_versions"].update(versions)
@@ -297,7 +318,8 @@ class SQLiteVMGuidelineRepository(VMGuidelineRepository):
                         guideline_text=data["guideline_text"],
                         status=data["status"],
                         platform=data["platform"],
-                        associated_software_name=data["associated_software_name"],
+                        associated_software_name=data["associated_software_name"]
+                        or "Unknown Software",
                         associated_platforms=sorted(list(data["associated_platforms"])),
                         associated_versions=sorted(list(data["associated_versions"])),
                         module_paths=data["module_paths"],

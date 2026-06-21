@@ -4,7 +4,7 @@ from .base import AnalyticsService
 from services import (
     MSFModuleService,
     VulnerabilityTargetService,
-    VMGuidelineService,
+    SoftwareGuidelineService,
 )
 from models import VulnerabilityTarget
 from utils import OutputBuffer
@@ -19,11 +19,11 @@ class CLIAnalyticsService(AnalyticsService):
         self,
         msf_service: MSFModuleService,
         vuln_service: VulnerabilityTargetService,
-        guide_service: VMGuidelineService,
+        sw_guide_service: SoftwareGuidelineService,
     ):
         self.msf_service = msf_service
         self.vuln_service = vuln_service
-        self.guide_service = guide_service
+        self.sw_guide_service = sw_guide_service
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def _generate_bar(self, percentage: float, max_bar_length: int = 25) -> str:
@@ -155,7 +155,7 @@ class CLIAnalyticsService(AnalyticsService):
                 buf.write("=" * 70)
 
             # Panel 5: VM Guideline Coverage & Consolidation
-            stats = self.guide_service.get_guideline_coverage_stats()
+            stats = self.sw_guide_service.get_guideline_coverage_stats()
             buf.write("\n" + "=" * 70)
             buf.write(f"{'VM GUIDELINE COVERAGE & CONSOLIDATION':^70}")
             buf.write("=" * 70)
@@ -163,7 +163,9 @@ class CLIAnalyticsService(AnalyticsService):
             buf.write(f" Average Module Coverage per VM: {stats.average_coverage:.2f}")
             buf.write("-" * 70)
             if stats.total_guidelines > 0:
-                buf.write(f" {'VM ID':<8}{'Target Software Product':<36}{'Status':<14}{'MSF Covered'}")
+                buf.write(
+                    f" {'VM ID':<8}{'Target Software Product':<36}{'Status':<14}{'MSF Covered'}"
+                )
                 buf.write("-" * 70)
                 for item in stats.guidelines:
                     display_software = (

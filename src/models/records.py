@@ -24,11 +24,22 @@ class SoftwareRecord(BaseModel):
     required_configs: List[str] = Field(default_factory=list)
 
 
-class VMGuidelineRecord(BaseModel):
+class OSGuidelineRecord(BaseModel):
     id: Optional[int] = None
-    path: str
+    os_name: str
     guideline: str
-    status: str = "UNVERIFIED"
     platform: str = ""
+    status: str = "UNVERIFIED"
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class SoftwareGuidelineRecord(BaseModel):
+    id: Optional[int] = None
+    path: str = ""
+    guideline: str
+    os_guideline_id: int
+    software_id: int
+    status: str = "UNVERIFIED"
     created_at: Optional[str] = None
     updated_at: Optional[str] = None

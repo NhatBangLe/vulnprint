@@ -3,7 +3,8 @@ from typing import List, Optional, Tuple
 from models import (
     MSFModuleRecord,
     SoftwareRecord,
-    VMGuidelineRecord,
+    OSGuidelineRecord,
+    SoftwareGuidelineRecord,
 )
 
 
@@ -71,7 +72,8 @@ class MSFModuleRepository(ABC):
         Tuple[
             MSFModuleRecord,
             Optional[SoftwareRecord],
-            Optional[VMGuidelineRecord],
+            Optional[SoftwareGuidelineRecord],
+            Optional[OSGuidelineRecord],
         ]
     ]:
         """

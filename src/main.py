@@ -9,11 +9,13 @@ from models import CLIArguments
 from repositories import (
     SQLiteMSFModuleRepository,
     SQLiteSoftwareRepository,
-    SQLiteVMGuidelineRepository,
+    SQLiteOSGuidelineRepository,
+    SQLiteSoftwareGuidelineRepository,
 )
 from database import SQLiteDatabaseManager
 from services import (
-    VMGuidelineService,
+    OSGuidelineService,
+    SoftwareGuidelineService,
     MetasploitRPCService,
     MSFModuleService,
     VulnerabilityTargetService,
@@ -21,7 +23,8 @@ from services import (
     CLIAnalyticsService,
     DefaultMSFModuleService,
     DefaultVulnerabilityTargetService,
-    DefaultVMGuidelineService,
+    DefaultOSGuidelineService,
+    DefaultSoftwareGuidelineService,
 )
 from agents import VulnerabilityTargetExtractorAgent, VMGuidelineGeneratorAgent
 from config import settings
@@ -137,7 +140,12 @@ examples:
 
 def setup_database_and_services(
     db_path: str,
-) -> Tuple[MSFModuleService, VulnerabilityTargetService, VMGuidelineService]:
+) -> Tuple[
+    MSFModuleService,
+    VulnerabilityTargetService,
+    OSGuidelineService,
+    SoftwareGuidelineService,
+]:
     # Initialize database schema using DatabaseManager
     db_manager = SQLiteDatabaseManager(db_path=db_path)
     db_manager.initialize_schema()
@@ -145,35 +153,38 @@ def setup_database_and_services(
     # Instantiate repositories
     msf_repo = SQLiteMSFModuleRepository(db_manager=db_manager)
     software_repo = SQLiteSoftwareRepository(db_manager=db_manager)
-    guide_repo = SQLiteVMGuidelineRepository(db_manager=db_manager)
+    os_guide_repo = SQLiteOSGuidelineRepository(db_manager=db_manager)
+    sw_guide_repo = SQLiteSoftwareGuidelineRepository(db_manager=db_manager)
 
     # Wrap repositories in Domain Services
     msf_service = DefaultMSFModuleService(
         msf_repo=msf_repo, software_repo=software_repo
     )
     vuln_service = DefaultVulnerabilityTargetService(software_repo=software_repo)
-    guide_service = DefaultVMGuidelineService(guide_repo=guide_repo)
+    os_guide_service = DefaultOSGuidelineService(os_guide_repo=os_guide_repo)
+    sw_guide_service = DefaultSoftwareGuidelineService(sw_guide_repo=sw_guide_repo)
 
-    return msf_service, vuln_service, guide_service
+    return msf_service, vuln_service, os_guide_service, sw_guide_service
 
 
 def handle_review_mode(
-    guide_service: VMGuidelineService,
+    os_guide_service: OSGuidelineService,
+    sw_guide_service: SoftwareGuidelineService,
     vuln_service: VulnerabilityTargetService,
     msf_service: MSFModuleService,
     logger: logging.Logger,
 ) -> None:
-    unverified_guidelines = guide_service.get_unverified_guidelines()
+    unverified_guidelines = sw_guide_service.get_unverified_guidelines()
     if not unverified_guidelines:
-        logger.info("No unverified VM guidelines found in the database.")
+        logger.info("No unverified Software guidelines found in the database.")
         return
 
     logger.info(
-        f"Found {len(unverified_guidelines)} unverified VM guidelines to review."
+        f"Found {len(unverified_guidelines)} unverified Software guidelines to review."
     )
-    for idx, guide_domain in enumerate(unverified_guidelines, 1):
-        path = guide_domain.path
-        guideline = guide_domain.guideline
+    for idx, sw_guide in enumerate(unverified_guidelines, 1):
+        path = sw_guide.path
+        guideline = sw_guide.guideline
 
         # Map associated info for display using services and domain models
         vuln_target = vuln_service.get_vulnerability_target(path)
@@ -184,11 +195,21 @@ def handle_review_mode(
             ", ".join(msf_details.cves) if msf_details and msf_details.cves else "None"
         )
 
+        os_guide = os_guide_service.get_os_guideline(sw_guide.os_guideline_id)
+        os_name = os_guide.os_name if os_guide else "Unknown OS"
+        os_guideline_text = (
+            os_guide.guideline if os_guide else "No OS setup instructions."
+        )
+
         print(f"\n==================================================")
         print(f"[{idx}/{len(unverified_guidelines)}] Reviewing guideline for: {path}")
         print(f"Target Software: {software_name}")
         print(f"Associated CVEs: {cves}")
         print(f"--------------------------------------------------")
+        print(f"OS Setup Guideline ({os_name}):")
+        print(os_guideline_text)
+        print(f"--------------------------------------------------")
+        print(f"Software Installation Guideline:")
         print(guideline)
         print(f"--------------------------------------------------")
 
@@ -201,7 +222,7 @@ def handle_review_mode(
                 .lower()
             )
             if choice in ["1", "approve", "a"]:
-                guide_service.update_guideline_status(path, "VERIFIED")
+                sw_guide_service.update_guideline_status(path, "VERIFIED")
                 logger.info(f"Approved and marked guideline for {path} as VERIFIED.")
                 break
             elif choice in ["2", "modify", "m"]:
@@ -236,7 +257,7 @@ def handle_review_mode(
                     with open(temp_file, "r", encoding="utf-8") as tf:
                         modified_guideline = tf.read()
 
-                    guide_service.update_guideline_status(
+                    sw_guide_service.update_guideline_status(
                         path, "VERIFIED", modified_guideline
                     )
                     logger.info(
@@ -250,7 +271,7 @@ def handle_review_mode(
                     logger.error("Temporary file not found. Skipping modification.")
                 break
             elif choice in ["3", "reject", "r"]:
-                guide_service.update_guideline_status(path, "REJECTED")
+                sw_guide_service.update_guideline_status(path, "REJECTED")
                 logger.info(f"Marked guideline for {path} as REJECTED.")
                 break
             elif choice in ["4", "skip", "s"]:
@@ -264,29 +285,38 @@ def handle_review_mode(
 
 
 def handle_export_guide_mode(
-    guide_service: VMGuidelineService,
+    os_guide_service: OSGuidelineService,
+    sw_guide_service: SoftwareGuidelineService,
     export_guide_path: str,
     export_file_path: Optional[str],
     logger: logging.Logger,
 ) -> None:
+    sw_guidelines = []
     if export_guide_path.isdigit():
-        guide_domain = guide_service.get_vm_guideline(int(export_guide_path))
-        if not guide_domain:
-            logger.error(f"No VM guideline found for: {export_guide_path}")
-            return
-        guide_domains = [guide_domain]
+        sw_guide = sw_guide_service.get_software_guideline(int(export_guide_path))
+        if sw_guide:
+            sw_guidelines.append(sw_guide)
     else:
-        guide_domains = guide_service.get_vm_guideline_by_path(export_guide_path)
-        if not guide_domains:
-            logger.error(f"No VM guidelines found for: {export_guide_path}")
-            return
+        sw_guidelines = sw_guide_service.get_software_guidelines_by_path(
+            export_guide_path
+        )
+
+    if not sw_guidelines:
+        logger.error(f"No Software guidelines found for: {export_guide_path}")
+        return
 
     output_parts = []
-    for g in guide_domains:
+    for sw_guide in sw_guidelines:
+        os_guide = os_guide_service.get_os_guideline(sw_guide.os_guideline_id)
+        os_name = os_guide.os_name if os_guide else "Unknown OS"
+        os_text = os_guide.guideline if os_guide else "No OS setup instructions."
         output_parts.append(
-            f"# VM Installation Guideline for: {g.path} (ID: {g.id})\n"
-            f"Verification Status: {g.status}\n\n"
-            f"{g.guideline}\n"
+            f"# VM Installation Guideline for: {sw_guide.path} (ID: {sw_guide.id})\n"
+            f"Verification Status: {sw_guide.status.value}\n\n"
+            f"## 🖥️ Operating System Setup ({os_name})\n"
+            f"{os_text}\n\n"
+            f"## 💿 Software Installation\n"
+            f"{sw_guide.guideline}\n"
         )
     output_text = "\n---\n\n".join(output_parts)
 
@@ -310,12 +340,12 @@ def handle_analytics_mode(
     args: CLIArguments,
     msf_service: MSFModuleService,
     vuln_service: VulnerabilityTargetService,
-    guide_service: VMGuidelineService,
+    sw_guide_service: SoftwareGuidelineService,
 ) -> None:
     analytics_service = CLIAnalyticsService(
         msf_service=msf_service,
         vuln_service=vuln_service,
-        guide_service=guide_service,
+        sw_guide_service=sw_guide_service,
     )
     if args.summary:
         analytics_service.display_dashboard()
@@ -336,7 +366,8 @@ def handle_search_ingestion(
     args: CLIArguments,
     msf_service: MSFModuleService,
     vuln_service: VulnerabilityTargetService,
-    guide_service: VMGuidelineService,
+    os_guide_service: OSGuidelineService,
+    sw_guide_service: SoftwareGuidelineService,
     logger: logging.Logger,
 ) -> None:
     if not settings.msf_rpc_password:
@@ -393,7 +424,8 @@ def handle_search_ingestion(
         msf_service=msf_service,
         vuln_service=vuln_service,
         output_dir=settings.blueprints_dir,
-        guide_service=guide_service,
+        os_guide_service=os_guide_service,
+        sw_guide_service=sw_guide_service,
         vm_guideline_generator_agent=vm_guideline_generator_agent,
     )
 
@@ -470,8 +502,10 @@ def main():
     args = parse_args()
 
     logger.info("Initializing database and services...")
-    msf_service, vuln_service, guide_service = setup_database_and_services(
-        db_path=settings.database_path,
+    msf_service, vuln_service, os_guide_service, sw_guide_service = (
+        setup_database_and_services(
+            db_path=settings.database_path,
+        )
     )
 
     # Route based on command/mode
@@ -484,22 +518,26 @@ def main():
         or args.export_guide
     ):
         if args.review:
-            handle_review_mode(guide_service, vuln_service, msf_service, logger)
+            handle_review_mode(
+                os_guide_service, sw_guide_service, vuln_service, msf_service, logger
+            )
         elif args.export_guide:
             handle_export_guide_mode(
-                guide_service=guide_service,
+                os_guide_service=os_guide_service,
+                sw_guide_service=sw_guide_service,
                 export_guide_path=args.export_guide,
                 export_file_path=args.export,
                 logger=logger,
             )
         else:
-            handle_analytics_mode(args, msf_service, vuln_service, guide_service)
+            handle_analytics_mode(args, msf_service, vuln_service, sw_guide_service)
     elif args.search:
         handle_search_ingestion(
             args=args,
             msf_service=msf_service,
             vuln_service=vuln_service,
-            guide_service=guide_service,
+            os_guide_service=os_guide_service,
+            sw_guide_service=sw_guide_service,
             logger=logger,
         )
 

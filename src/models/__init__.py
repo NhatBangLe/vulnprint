@@ -2,8 +2,9 @@ from .cli import CLIArguments
 from .domain import (
     MetasploitModuleDetails,
     VulnerabilityTarget,
-    VMGuideline,
-    VMGuidelineStatus,
+    OSGuideline,
+    SoftwareGuideline,
+    GuidelineStatus,
     VMGuidelineMetadata,
     GuidelineCoverageItem,
     VMGuidelineCoverageStats,
@@ -11,19 +12,22 @@ from .domain import (
 from .records import (
     MSFModuleRecord,
     SoftwareRecord,
-    VMGuidelineRecord,
+    OSGuidelineRecord,
+    SoftwareGuidelineRecord,
 )
 
 __all__ = [
     "CLIArguments",
     "MetasploitModuleDetails",
     "VulnerabilityTarget",
-    "VMGuideline",
-    "VMGuidelineStatus",
+    "OSGuideline",
+    "SoftwareGuideline",
+    "GuidelineStatus",
     "VMGuidelineMetadata",
     "GuidelineCoverageItem",
     "VMGuidelineCoverageStats",
     "MSFModuleRecord",
     "SoftwareRecord",
-    "VMGuidelineRecord",
+    "OSGuidelineRecord",
+    "SoftwareGuidelineRecord",
 ]
