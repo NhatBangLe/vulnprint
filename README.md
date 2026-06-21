@@ -75,6 +75,10 @@ Maintains a local SQLite database tracking historical inquiries, CVE mappings, t
 
 Generates clean terminal ASCII charts visualizing technology density distributions across your query parameters (so you know which core systems to build first). It outputs clean Markdown manuals outlining legacy archive download requirements, setup configurations, and validation lifecycles.
 
+### 5. VM Guideline Matching & Reuse Engine
+
+Instead of generating duplicate VM setup instructions for every single Metasploit module path, Vulnprint evaluates target compatibility (software name, target platform, and version overlap) against existing ledger records. When a match is found, the system links the guideline dynamically in the database, consolidating lab setups and avoiding redundant LLM generation calls.
+
 ---
 
 ## 📦 Installation & Setup
@@ -137,15 +141,47 @@ python src/main.py --search "type:exploit platform:linux date:2025"
 
 ### View Technology Analytics Dashboard
 
-Display statistical distribution breakdowns from the SQLite ledger:
+Display statistical distribution breakdowns, exploit rank spreads, and VM guideline coverage/consolidation stats from the SQLite ledger:
 
 ```bash
 python src/main.py --analytics
 ```
 
+### Export VM Guidelines
+
+Export a specific guideline to a Markdown file using its unique **VM ID** (found in the analytics dashboard) or its **Metasploit module path**:
+
+```bash
+# Export using unique VM ID:
+python src/main.py --export-guide 1 --export reports/tomcat_guide.md
+
+# Export using Metasploit module path:
+python src/main.py --export-guide "exploit/multi/http/tomcat_mgr_deploy" --export reports/tomcat_mgr_guide.md
+```
+
+### Filter and Search Local Database
+
+Search local vulnerability profiles with wildcard support and filter by target platform/OS or exploit rank:
+
+```bash
+# General wildcard search:
+python src/main.py --search-db "apache*"
+
+# Wildcard search with OS and exploit rank filters, and export results:
+python src/main.py --search-db "apache*" --platform "linux" --rank "excellent" --export reports/apache_linux_excellent.txt
+```
+
+### Review Guidelines Interactively
+
+Review, modify, approve, or reject unverified guidelines saved in the database:
+
+```bash
+python src/main.py --review
+```
+
 ### Access Your Lab Manuals
 
-Check the generated manuals folder for your manual configuration layout guide:
+Check the generated blueprints folder for target manual configuration details:
 
 ```bash
 cat vulnprint_blueprints/CVE-2020-1938.md
