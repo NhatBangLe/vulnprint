@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import List, Optional
-from models import VMGuideline
+from models import VMGuideline, VMGuidelineCoverageStats
 
 
 class VMGuidelineService(ABC):
@@ -42,5 +42,28 @@ class VMGuidelineService(ABC):
     ) -> None:
         """
         Updates guideline status.
+        """
+        pass
+
+    @abstractmethod
+    def link_guideline_to_module(self, msf_path: str, guideline_id: int) -> None:
+        """
+        Links an existing guideline to an MSF module path.
+        """
+        pass
+
+    @abstractmethod
+    def find_suitable_guideline(
+        self, platform: List[str], software_name: str, vulnerable_versions: List[str]
+    ) -> Optional[VMGuideline]:
+        """
+        Finds a suitable existing VM guideline in the database based on scoring compatibility.
+        """
+        pass
+
+    @abstractmethod
+    def get_guideline_coverage_stats(self) -> VMGuidelineCoverageStats:
+        """
+        Compiles guideline coverage metrics and returns them in a Pydantic container.
         """
         pass

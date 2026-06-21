@@ -9,6 +9,8 @@ from .records import (
 
 
 class MetasploitModuleDetails(BaseModel):
+    module_id: Optional[int] = None
+    software_id: Optional[int] = None
     description: str
     cves: List[str]
     type: str = ""
@@ -27,6 +29,8 @@ class MetasploitModuleDetails(BaseModel):
         Maps an MSFModuleRecord and optional SoftwareRecord to MetasploitModuleDetails.
         """
         return cls(
+            module_id=msf_rec.id,
+            software_id=software_rec.id if software_rec else None,
             description=msf_rec.description,
             cves=software_rec.cves if software_rec else [],
             type=msf_rec.type,
@@ -40,6 +44,7 @@ class MetasploitModuleDetails(BaseModel):
 
 
 class VulnerabilityTarget(BaseModel):
+    id: Optional[int] = None
     software_name: str = Field(
         ..., description="Normalized generic name of the application"
     )
@@ -61,6 +66,7 @@ class VulnerabilityTarget(BaseModel):
         Maps a SoftwareRecord to VulnerabilityTarget.
         """
         return cls(
+            id=software_rec.id,
             software_name=software_rec.name,
             vulnerable_versions=software_rec.vulnerable_versions,
             required_configs=software_rec.required_configs,
@@ -103,3 +109,28 @@ class VMGuideline(BaseModel):
             status=real_status,
             platform=record.platform,
         )
+
+
+class VMGuidelineMetadata(BaseModel):
+    guideline_id: int
+    guideline_text: str
+    status: str
+    platform: str
+    associated_software_name: str
+    associated_platforms: List[str] = Field(default_factory=list)
+    associated_versions: List[str] = Field(default_factory=list)
+    module_paths: List[str] = Field(default_factory=list)
+
+
+class GuidelineCoverageItem(BaseModel):
+    guideline_id: int
+    software_name: str
+    status: str
+    modules_covered: List[str] = Field(default_factory=list)
+    coverage_count: int
+
+
+class VMGuidelineCoverageStats(BaseModel):
+    total_guidelines: int
+    average_coverage: float
+    guidelines: List[GuidelineCoverageItem] = Field(default_factory=list)

@@ -154,6 +154,31 @@ class CLIAnalyticsService(AnalyticsService):
                     buf.write(f" {idx}. {display_config:<51}{count:<10}")
                 buf.write("=" * 70)
 
+            # Panel 5: VM Guideline Coverage & Consolidation
+            stats = self.guide_service.get_guideline_coverage_stats()
+            buf.write("\n" + "=" * 70)
+            buf.write(f"{'VM GUIDELINE COVERAGE & CONSOLIDATION':^70}")
+            buf.write("=" * 70)
+            buf.write(f" Total Unique VM Guidelines: {stats.total_guidelines}")
+            buf.write(f" Average Module Coverage per VM: {stats.average_coverage:.2f}")
+            buf.write("-" * 70)
+            if stats.total_guidelines > 0:
+                buf.write(f" {'VM ID':<8}{'Target Software Product':<36}{'Status':<14}{'MSF Covered'}")
+                buf.write("-" * 70)
+                for item in stats.guidelines:
+                    display_software = (
+                        item.software_name[:34] + ".."
+                        if len(item.software_name) > 34
+                        else item.software_name
+                    )
+                    buf.write(
+                        f" {item.guideline_id:<8}"
+                        f"{display_software:<36}"
+                        f"{item.status:<14}"
+                        f"{item.coverage_count}"
+                    )
+                buf.write("=" * 70)
+
             buf.save()
         except Exception as e:
             self._logger.error(f"Error displaying advanced analytics: {e}")

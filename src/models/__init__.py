@@ -4,6 +4,9 @@ from .domain import (
     VulnerabilityTarget,
     VMGuideline,
     VMGuidelineStatus,
+    VMGuidelineMetadata,
+    GuidelineCoverageItem,
+    VMGuidelineCoverageStats,
 )
 from .records import (
     MSFModuleRecord,
@@ -17,6 +20,9 @@ __all__ = [
     "VulnerabilityTarget",
     "VMGuideline",
     "VMGuidelineStatus",
+    "VMGuidelineMetadata",
+    "GuidelineCoverageItem",
+    "VMGuidelineCoverageStats",
     "MSFModuleRecord",
     "SoftwareRecord",
     "VMGuidelineRecord",

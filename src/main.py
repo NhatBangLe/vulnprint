@@ -4,11 +4,8 @@ import sys
 import argparse
 import os
 import logging
-from typing import Optional
-from models import (
-    CLIArguments,
-)
-from services.metasploit import MetasploitRPCService
+from typing import Optional, Tuple
+from models import CLIArguments
 from repositories import (
     SQLiteMSFModuleRepository,
     SQLiteSoftwareRepository,
@@ -16,13 +13,17 @@ from repositories import (
 )
 from database import SQLiteDatabaseManager
 from services import (
+    VMGuidelineService,
+    MetasploitRPCService,
+    MSFModuleService,
+    VulnerabilityTargetService,
+    MarkdownBlueprintService,
+    CLIAnalyticsService,
     DefaultMSFModuleService,
     DefaultVulnerabilityTargetService,
     DefaultVMGuidelineService,
 )
 from agents import VulnerabilityTargetExtractorAgent, VMGuidelineGeneratorAgent
-from services.blueprint import MarkdownBlueprintService
-from services.analytics import CLIAnalyticsService
 from config import settings
 from utils import configure_logging
 
@@ -42,6 +43,9 @@ examples:
   # Export the VM guideline for a specific Metasploit path:
   python src/main.py --export-guide "exploit/multi/http/tomcat_mgr_deploy" --export reports/tomcat_mgr.md
 
+  # Export the VM guideline using its unique database VM ID:
+  python src/main.py --export-guide 1 --export reports/tomcat_guide_v1.md
+
   # Show basic software vulnerability counts:
   python src/main.py --summary
 
@@ -51,8 +55,8 @@ examples:
   # List all unique software targets in the database:
   python src/main.py --list-software
 
-  # Search local database with wildcards:
-  python src/main.py --search-db "apache*"
+  # Search local database for Apache vulnerabilities with Linux platform & excellent rank filter, and export output:
+  python src/main.py --search-db "apache*" --platform "linux" --rank "excellent" --export reports/apache_linux_excellent.txt
 """,
     )
 
@@ -60,59 +64,59 @@ examples:
     group.add_argument(
         "--search",
         type=str,
-        help="Execute query command against Metasploit RPC console and build blueprints",
+        help="Query active Metasploit framework module registry and generate new lab blueprints",
     )
     group.add_argument(
         "--analytics",
         action="store_true",
-        help="Generate ASCII detailed metrics dashboard panels from database ledger",
+        help="Generate comprehensive ASCII metrics panels, technology distributions, and VM guideline coverage statistics",
     )
     group.add_argument(
         "--summary",
         action="store_true",
-        help="Generate ASCII basic technology density metrics from database ledger",
+        help="Generate summary of target technology counts and percentages from local database",
     )
     group.add_argument(
         "--list-software",
         action="store_true",
-        help="List all unique target software names stored in the database",
+        help="Display all unique software products cataloged in the local database",
     )
     group.add_argument(
         "--search-db",
         type=str,
-        help="Search the local vulnerability database with wildcard support",
+        help="Search vulnerability profiles in local database with SQL wildcard support",
     )
     group.add_argument(
         "--review",
         action="store_true",
-        help="Interactively review all UNVERIFIED VM guidelines in the database",
+        help="Start interactive review workflow to approve, modify, or reject unverified guidelines",
     )
     group.add_argument(
         "--export-guide",
         type=str,
-        help="Export the saved VM guideline for a specific Metasploit path",
+        help="Retrieve and output a VM installation guideline by Metasploit path or unique VM ID",
     )
 
     # Optional filters and options
     parser.add_argument(
         "--platform",
         type=str,
-        help="Filter database search by target platform/OS",
+        help="Filter database searches/queries by target OS platform (e.g. linux, windows)",
     )
     parser.add_argument(
         "--rank",
         type=str,
-        help="Filter database search by exploit reliability rank",
+        help="Filter database searches/queries by exploit reliability rank (e.g. excellent, great)",
     )
     parser.add_argument(
         "--export",
         type=str,
-        help="Export the generated report/results/guidelines to a Markdown file",
+        help="File path to save output reports, list details, or guidelines as Markdown",
     )
     parser.add_argument(
         "--limit",
         type=int,
-        help="Limit the number of Metasploit modules processed during ingestion",
+        help="Cap the maximum number of Metasploit modules to ingest and parse per search",
     )
 
     args = parser.parse_args()
@@ -131,7 +135,9 @@ examples:
     )
 
 
-def setup_database_and_services(db_path: str):
+def setup_database_and_services(
+    db_path: str,
+) -> Tuple[MSFModuleService, VulnerabilityTargetService, VMGuidelineService]:
     # Initialize database schema using DatabaseManager
     db_manager = SQLiteDatabaseManager(db_path=db_path)
     db_manager.initialize_schema()
@@ -152,7 +158,10 @@ def setup_database_and_services(db_path: str):
 
 
 def handle_review_mode(
-    guide_service, vuln_service, msf_service, logger: logging.Logger
+    guide_service: VMGuidelineService,
+    vuln_service: VulnerabilityTargetService,
+    msf_service: MSFModuleService,
+    logger: logging.Logger,
 ) -> None:
     unverified_guidelines = guide_service.get_unverified_guidelines()
     if not unverified_guidelines:
@@ -255,7 +264,7 @@ def handle_review_mode(
 
 
 def handle_export_guide_mode(
-    guide_service,
+    guide_service: VMGuidelineService,
     export_guide_path: str,
     export_file_path: Optional[str],
     logger: logging.Logger,
@@ -298,7 +307,10 @@ def handle_export_guide_mode(
 
 
 def handle_analytics_mode(
-    args: CLIArguments, msf_service, vuln_service, guide_service
+    args: CLIArguments,
+    msf_service: MSFModuleService,
+    vuln_service: VulnerabilityTargetService,
+    guide_service: VMGuidelineService,
 ) -> None:
     analytics_service = CLIAnalyticsService(
         msf_service=msf_service,
@@ -322,9 +334,9 @@ def handle_analytics_mode(
 
 def handle_search_ingestion(
     args: CLIArguments,
-    msf_service,
-    vuln_service,
-    guide_service,
+    msf_service: MSFModuleService,
+    vuln_service: VulnerabilityTargetService,
+    guide_service: VMGuidelineService,
     logger: logging.Logger,
 ) -> None:
     if not settings.msf_rpc_password:

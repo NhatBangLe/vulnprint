@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import List, Optional
-from models import VMGuidelineRecord
+from models import VMGuidelineRecord, VMGuidelineMetadata
 
 
 class VMGuidelineRepository(ABC):
@@ -42,5 +42,19 @@ class VMGuidelineRepository(ABC):
     ) -> None:
         """
         Updates the status (and optionally modifies text) of a VM guideline.
+        """
+        pass
+
+    @abstractmethod
+    def link_guideline_to_module(self, msf_path: str, guideline_id: int) -> None:
+        """
+        Links an existing guideline to an MSF module path.
+        """
+        pass
+
+    @abstractmethod
+    def get_guidelines_with_software_metadata(self) -> List[VMGuidelineMetadata]:
+        """
+        Retrieves all guidelines and their associated module/software metadata mapping.
         """
         pass
