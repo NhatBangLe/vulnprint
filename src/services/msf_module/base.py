@@ -1,6 +1,12 @@
 from abc import ABC, abstractmethod
 from typing import List, Tuple, Optional
-from models import MetasploitModuleDetails
+from models import (
+    MetasploitModuleDetails,
+    MSFModule,
+    Software,
+    SoftwareGuideline,
+    OSGuideline,
+)
 
 
 class MSFModuleService(ABC):
@@ -10,16 +16,29 @@ class MSFModuleService(ABC):
     """
 
     @abstractmethod
-    def store_module_details(self, details: MetasploitModuleDetails) -> None:
+    def store_module(self, data: MetasploitModuleDetails | MSFModule) -> Optional[int]:
         """
-        Converts details to record DTO and stores it in the database layer.
+        Stores Metasploit module details.
+
+        Args:
+            data: Either a MetasploitModuleDetails domain object or an MSFModule.
+
+        Returns:
+            ID of the stored module.
         """
         pass
 
     @abstractmethod
-    def get_module_details(self, path: str) -> Optional[MetasploitModuleDetails]:
+    def get_module_by_id(self, module_id: int) -> Optional[MSFModule]:
         """
-        Retrieves database DTOs and converts/returns a domain model.
+        Retrieves database DTO and converts/returns a domain model.
+        """
+        pass
+
+    @abstractmethod
+    def get_module_by_path(self, path: str) -> Optional[MSFModule]:
+        """
+        Retrieves database DTO and converts/returns a domain model.
         """
         pass
 
@@ -64,7 +83,14 @@ class MSFModuleService(ABC):
         software_pattern: Optional[str] = None,
         platform: Optional[str] = None,
         rank: Optional[str] = None,
-    ) -> List[MetasploitModuleDetails]:
+    ) -> List[
+        Tuple[
+            MSFModule,
+            Optional[Software],
+            Optional[SoftwareGuideline],
+            Optional[OSGuideline],
+        ]
+    ]:
         """
         Searches modules and returns their details as domain models.
         """

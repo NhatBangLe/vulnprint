@@ -1,5 +1,5 @@
 from .msf_module import MSFModuleService, DefaultMSFModuleService
-from .vulnerability import VulnerabilityTargetService, DefaultVulnerabilityTargetService
+from .software import SoftwareService, DefaultSoftwareService
 from .os_guideline.base import OSGuidelineService
 from .os_guideline.os_guideline import DefaultOSGuidelineService
 from .software_guideline.base import SoftwareGuidelineService
@@ -12,8 +12,8 @@ from .metasploit import MetasploitService, MetasploitRPCService
 __all__ = [
     "MSFModuleService",
     "DefaultMSFModuleService",
-    "VulnerabilityTargetService",
-    "DefaultVulnerabilityTargetService",
+    "SoftwareService",
+    "DefaultSoftwareService",
     "OSGuidelineService",
     "DefaultOSGuidelineService",
     "SoftwareGuidelineService",

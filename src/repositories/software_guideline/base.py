@@ -9,21 +9,35 @@ class SoftwareGuidelineRepository(ABC):
     """
 
     @abstractmethod
-    def store_software_guideline(self, record: SoftwareGuidelineRecord, path: str) -> int:
+    def save(self, record: SoftwareGuidelineRecord) -> Optional[int]:
         """
         Stores a software installation guideline, links it to a module path, and returns its ID.
         """
         pass
 
     @abstractmethod
-    def get_software_guideline(self, guideline_id: int) -> Optional[SoftwareGuidelineRecord]:
+    def exists_by_id(self, guideline_id: int) -> bool:
+        """
+        Checks if a software guideline with the given ID exists.
+        """
+        pass
+
+    @abstractmethod
+    def exists_by_path(self, msf_path: str) -> Optional[int]:
+        """
+        Checks if a software guideline with the given path exists and returns its ID.
+        """
+        pass
+
+    @abstractmethod
+    def get_by_id(self, guideline_id: int) -> Optional[SoftwareGuidelineRecord]:
         """
         Retrieves a software guideline for the given ID.
         """
         pass
 
     @abstractmethod
-    def get_software_guidelines_by_path(self, msf_path: str) -> List[SoftwareGuidelineRecord]:
+    def get_by_path(self, msf_path: str) -> List[SoftwareGuidelineRecord]:
         """
         Retrieves all software guidelines associated with the given module path.
         """
@@ -33,15 +47,6 @@ class SoftwareGuidelineRepository(ABC):
     def get_unverified_guidelines(self) -> List[SoftwareGuidelineRecord]:
         """
         Retrieves all software guidelines marked as UNVERIFIED.
-        """
-        pass
-
-    @abstractmethod
-    def update_guideline_status(
-        self, msf_path: str, status: str, guideline: Optional[str] = None
-    ) -> None:
-        """
-        Updates the status (and optionally modifies text) of the latest software guideline linked to msf_path.
         """
         pass
 

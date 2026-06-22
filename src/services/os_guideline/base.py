@@ -16,7 +16,7 @@ class OSGuidelineService(ABC):
         pass
 
     @abstractmethod
-    def get_os_guideline(self, guideline_id: int) -> Optional[OSGuideline]:
+    def get_os_guideline_by_id(self, guideline_id: int) -> Optional[OSGuideline]:
         """
         Retrieves OS guideline by ID and converts/returns a domain model.
         """

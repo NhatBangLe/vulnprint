@@ -3,10 +3,9 @@ from typing import Optional
 from .base import AnalyticsService
 from services import (
     MSFModuleService,
-    VulnerabilityTargetService,
+    SoftwareService,
     SoftwareGuidelineService,
 )
-from models import VulnerabilityTarget
 from utils import OutputBuffer
 
 
@@ -18,11 +17,11 @@ class CLIAnalyticsService(AnalyticsService):
     def __init__(
         self,
         msf_service: MSFModuleService,
-        vuln_service: VulnerabilityTargetService,
+        soft_service: SoftwareService,
         sw_guide_service: SoftwareGuidelineService,
     ):
         self.msf_service = msf_service
-        self.vuln_service = vuln_service
+        self.soft_service = soft_service
         self.sw_guide_service = sw_guide_service
         self._logger = logging.getLogger(self.__class__.__name__)
 
@@ -49,8 +48,8 @@ class CLIAnalyticsService(AnalyticsService):
                 print("=" * 70 + "\n")
                 return
 
-            # Query Top 10 technologies from VulnerabilityTargetService
-            top_techs = self.vuln_service.get_top_technologies(limit=10)
+            # Query Top 10 technologies from SoftwareService
+            top_techs = self.soft_service.get_top_software(limit=10)
 
             # Header for the table
             print(f"{'Rank':<6}{'Software Target':<36}{'Count':<10}{'Percentage':<10}")
@@ -135,7 +134,7 @@ class CLIAnalyticsService(AnalyticsService):
             buf.write("=" * 70)
 
             # Panel 4: Common Required Configurations
-            configs = self.vuln_service.get_required_configurations()
+            configs = self.soft_service.get_required_configurations()
             if configs:
                 from collections import Counter
 
@@ -190,7 +189,7 @@ class CLIAnalyticsService(AnalyticsService):
         Displays a list of all unique software targets.
         """
         try:
-            software_list = self.vuln_service.get_all_software()
+            software_list = self.soft_service.get_all_software()
             buf = OutputBuffer(export_path)
 
             buf.write("=" * 70)
@@ -222,8 +221,7 @@ class CLIAnalyticsService(AnalyticsService):
         Displays wildcard search results with optional platform and rank filters.
         """
         try:
-            # Query joined records from MSFModuleService
-            msf_modules = self.msf_service.search_modules(
+            search_results = self.msf_service.search_modules(
                 software_pattern=software_pattern, platform=platform, rank=rank
             )
             buf = OutputBuffer(export_path)
@@ -244,38 +242,26 @@ class CLIAnalyticsService(AnalyticsService):
                 buf.write(f" Active Filters: {', '.join(filters)}")
                 buf.write("-" * 70)
 
-            buf.write(f" Total Matches Found: {len(msf_modules)}")
+            buf.write(f" Total Matches Found: {len(search_results)}")
             buf.write("-" * 70)
 
-            if not msf_modules:
+            if not search_results:
                 buf.write(" No matching records found.")
                 buf.write("=" * 70)
                 buf.save()
                 return
 
-            current_software = None
-            for msf_details in msf_modules:
-                path = msf_details.module_name
-                vuln_target = self.vuln_service.get_vulnerability_target(path)
-                if not vuln_target:
-                    vuln_target = VulnerabilityTarget(software_name="Unknown")
-
-                if vuln_target.software_name != current_software:
-                    current_software = vuln_target.software_name
-                    buf.write(f"\n[Software Target: {current_software}]")
-                    buf.write("-" * 70)
-
-                buf.write(f" [+] {msf_details.name}")
-                buf.write(f"     Exploit Path: {path}")
-                if msf_details.cves:
-                    buf.write(f"     CVEs:         {', '.join(msf_details.cves)}")
-                if msf_details.platform:
-                    buf.write(f"     Platform/OS:  {', '.join(msf_details.platform)}")
-                if msf_details.rank:
-                    buf.write(f"     Exploit Rank: {msf_details.rank}")
-                if vuln_target.vulnerable_versions:
+            for msf_module, software, sg, osg in search_results:
+                buf.write(f" [+] {msf_module.display_name}")
+                buf.write(f"     Exploit Path: {msf_module.path}")
+                buf.write(f"     Platform/OS:  {', '.join(msf_module.platform)}")
+                buf.write(f"     Exploit Rank: {msf_module.rank}")
+                buf.write(f"     Disclosure Date: {msf_module.disclosure_date}")
+                if software:
+                    buf.write(f"     Target:       {software.name}")
+                    buf.write(f"     CVEs:         {', '.join(software.cves)}")
                     buf.write(
-                        f"     Versions:     {', '.join(vuln_target.vulnerable_versions)}"
+                        f"     Versions:     {', '.join(software.vulnerable_versions)}"
                     )
                 buf.write("")
 

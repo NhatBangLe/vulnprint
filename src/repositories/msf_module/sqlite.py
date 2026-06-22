@@ -18,11 +18,15 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
 
     def __init__(self, db_manager: DatabaseManager):
         if not isinstance(db_manager, SQLiteDatabaseManager):
-            raise TypeError("db_manager must be an instance of DatabaseManager")
+            raise TypeError("db_manager must be an instance of SQLiteDatabaseManager")
         self.db_manager: SQLiteDatabaseManager = db_manager
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def store_module_metadata(self, record: MSFModuleRecord) -> None:
+    def save(self, record: MSFModuleRecord) -> Optional[int]:
+        existing_record_id = self.exists_by_path(record.path)
+        if existing_record_id:
+            return self._update_by_id(existing_record_id, record)
+
         conn = None
         try:
             conn = self.db_manager.get_connection()
@@ -30,20 +34,11 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
             cursor.execute(
                 """
                 INSERT INTO msf_modules (
-                    path, name, display_name, type, rank, disclosure_date, documentation, description
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(path) DO UPDATE SET
-                    name = excluded.name,
-                    display_name = excluded.display_name,
-                    type = excluded.type,
-                    rank = excluded.rank,
-                    disclosure_date = excluded.disclosure_date,
-                    documentation = excluded.documentation,
-                    description = excluded.description;
+                    path, display_name, type, rank, disclosure_date, documentation, description
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     record.path,
-                    record.name,
                     record.display_name,
                     record.type,
                     record.rank,
@@ -52,33 +47,74 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
                     record.description,
                 ),
             )
+            module_id = cursor.lastrowid
             for plat in record.platform:
                 cursor.execute(
                     """
                     INSERT OR IGNORE INTO module_platforms (module_path, platform)
                     VALUES (?, ?);
                     """,
-                    (record.path, plat),
+                    (record.path, plat.lower().strip()),
                 )
             conn.commit()
+            return module_id
         except Exception as e:
             self._logger.error(f"Error storing module metadata for {record.path}: {e}")
-            raise
+            return None
         finally:
             if conn:
                 conn.close()
 
-    def get_module_metadata(self, path: str) -> Optional[MSFModuleRecord]:
+    def exists_by_id(self, module_id: int) -> bool:
+        conn = None
+        try:
+            conn = self.db_manager.get_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT 1 FROM msf_modules WHERE id = ?;",
+                (module_id,),
+            )
+            return bool(cursor.fetchone())
+        except Exception as e:
+            self._logger.error(
+                f"Error checking module existence by id for {module_id}: {e}"
+            )
+            return False
+        finally:
+            if conn:
+                conn.close()
+
+    def exists_by_path(self, msf_path: str) -> Optional[int]:
+        conn = None
+        try:
+            conn = self.db_manager.get_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT id FROM msf_modules WHERE path = ?;",
+                (msf_path,),
+            )
+            row = cursor.fetchone()
+            return row[0] if row else None
+        except Exception as e:
+            self._logger.error(
+                f"Error checking module existence by path for {msf_path}: {e}"
+            )
+            return None
+        finally:
+            if conn:
+                conn.close()
+
+    def get_by_id(self, module_id: int) -> Optional[MSFModuleRecord]:
         conn = None
         try:
             conn = self.db_manager.get_connection()
             cursor = conn.cursor()
             cursor.execute(
                 """
-                SELECT id, path, name, display_name, type, rank, disclosure_date, documentation, description
-                FROM msf_modules WHERE path = ?;
+                SELECT id, path, display_name, type, rank, disclosure_date, documentation, description
+                FROM msf_modules WHERE id = ?;
                 """,
-                (path,),
+                (module_id,),
             )
             row = cursor.fetchone()
             if not row:
@@ -86,7 +122,6 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
             (
                 m_id,
                 m_path,
-                m_name,
                 display_name,
                 m_type,
                 rank,
@@ -95,18 +130,10 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
                 desc,
             ) = row
 
-            cursor.execute(
-                """
-                SELECT platform FROM module_platforms WHERE module_path = ?;
-                """,
-                (path,),
-            )
-            platforms = [r[0] for r in cursor.fetchall() if r[0]]
-
+            platforms = self._get_module_platforms(m_path, cursor)
             return MSFModuleRecord(
                 id=m_id,
                 path=m_path,
-                name=m_name or "",
                 display_name=display_name or "",
                 type=m_type or "",
                 rank=rank or "",
@@ -116,7 +143,52 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
                 description=desc or "",
             )
         except Exception as e:
-            self._logger.error(f"Error retrieving module metadata for {path}: {e}")
+            self._logger.error(f"Error retrieving module metadata for {module_id}: {e}")
+            return None
+        finally:
+            if conn:
+                conn.close()
+
+    def get_by_path(self, msf_path: str) -> Optional[MSFModuleRecord]:
+        conn = None
+        try:
+            conn = self.db_manager.get_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT id, path, display_name, type, rank, disclosure_date, documentation, description
+                FROM msf_modules WHERE path = ?;
+                """,
+                (msf_path,),
+            )
+            row = cursor.fetchone()
+            if not row:
+                return None
+            (
+                m_id,
+                m_path,
+                display_name,
+                m_type,
+                rank,
+                disclosure_date,
+                doc,
+                desc,
+            ) = row
+
+            platforms = self._get_module_platforms(m_path, cursor)
+            return MSFModuleRecord(
+                id=m_id,
+                path=m_path,
+                display_name=display_name or "",
+                type=m_type or "",
+                rank=rank or "",
+                disclosure_date=disclosure_date or "",
+                platforms=platforms,
+                documentation=doc or "",
+                description=desc or "",
+            )
+        except Exception as e:
+            self._logger.error(f"Error retrieving module metadata for {msf_path}: {e}")
             return None
         finally:
             if conn:
@@ -233,7 +305,7 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
             conn = self.db_manager.get_connection()
             cursor = conn.cursor()
             query = """
-                SELECT m.id, m.path, m.name, m.display_name, m.type, m.rank, m.disclosure_date,
+                SELECT m.id, m.path, m.display_name, m.type, m.rank, m.disclosure_date,
                        (SELECT group_concat(platform) FROM module_platforms WHERE module_path = m.path) as platforms,
                        m.documentation, m.description,
                        s.id as software_id, s.name as software_name, s.cves, s.vulnerable_versions, s.required_configs,
@@ -267,7 +339,6 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
                 (
                     m_id,
                     m_path,
-                    m_name,
                     display_name,
                     mtype,
                     l_rank,
@@ -292,12 +363,11 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
                 m_rec = MSFModuleRecord(
                     id=m_id,
                     path=m_path,
-                    name=m_name or "",
                     display_name=display_name or "",
                     type=mtype or "",
                     rank=l_rank or "",
                     disclosure_date=disclosure_date or "",
-                    platform=plat_raw.split(",") if plat_raw else [],
+                    platforms=plat_raw.split(",") if plat_raw else [],
                     documentation=doc or "",
                     description=desc or "",
                 )
@@ -338,6 +408,48 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
         except Exception as e:
             self._logger.error(f"Error searching joined modules: {e}")
             return []
+        finally:
+            if conn:
+                conn.close()
+
+    def _get_module_platforms(self, module_path: str, cursor) -> List[str]:
+        cursor.execute(
+            """
+            SELECT platform FROM module_platforms WHERE module_path = ?;
+            """,
+            (module_path,),
+        )
+        platforms = [r[0] for r in cursor.fetchall() if r[0]]
+        return platforms
+
+    def _update_by_id(self, module_id: int, record: MSFModuleRecord) -> Optional[int]:
+        conn = None
+        try:
+            conn = self.db_manager.get_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE msf_modules
+                SET display_name = ?, type = ?, rank = ?, disclosure_date = ?, documentation = ?, description = ?
+                WHERE id = ?;
+                """,
+                (
+                    record.display_name,
+                    record.type,
+                    record.rank,
+                    record.disclosure_date,
+                    record.documentation,
+                    record.description,
+                    module_id,
+                ),
+            )
+            conn.commit()
+            return module_id
+        except Exception as e:
+            self._logger.error(f"Error updating module by id {module_id}: {e}")
+            if conn:
+                conn.rollback()
+            return None
         finally:
             if conn:
                 conn.close()

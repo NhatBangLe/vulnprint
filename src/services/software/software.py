@@ -1,0 +1,48 @@
+from typing import Tuple, List, Optional
+from repositories import SoftwareRepository
+from .base import SoftwareService
+from models import Software, SoftwareRecord
+
+
+class DefaultSoftwareService(SoftwareService):
+    """
+    Default implementation of the SoftwareService interface.
+    """
+
+    def __init__(self, software_repo: SoftwareRepository):
+        self.software_repo = software_repo
+
+    def store_software(self, data: Software) -> None:
+        # Retrieve existing record to keep existing CVEs
+        existing = self.software_repo.get_by_path(data.path)
+        cves_to_store = existing.cves if existing else []
+
+        software_rec = SoftwareRecord(
+            path=data.path,
+            name=data.name,
+            cves=cves_to_store,
+            vulnerable_versions=data.vulnerable_versions,
+            required_configs=data.required_configs,
+        )
+        self.software_repo.save(software_rec)
+
+    def get_software_by_path(self, path: str) -> Optional[Software]:
+        software_rec = self.software_repo.get_by_path(path)
+        if not software_rec:
+            return None
+        return Software.from_record(software_rec)
+
+    def get_software_by_id(self, software_id: int) -> Optional[Software]:
+        software_rec = self.software_repo.get_by_id(software_id)
+        if not software_rec:
+            return None
+        return Software.from_record(software_rec)
+
+    def get_top_software(self, limit: int = 10) -> List[Tuple[str, int]]:
+        return self.software_repo.get_top_software(limit=limit)
+
+    def get_all_software(self) -> List[str]:
+        return self.software_repo.get_all_software()
+
+    def get_required_configurations(self) -> List[str]:
+        return self.software_repo.get_required_configurations()

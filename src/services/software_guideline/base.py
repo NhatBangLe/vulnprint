@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import List, Optional, Tuple
-from models import SoftwareGuideline, VMGuidelineCoverageStats
+from models import SoftwareGuideline, VMGuidelineCoverageStats, GuidelineStatus
 
 
 class SoftwareGuidelineService(ABC):
@@ -9,7 +9,9 @@ class SoftwareGuidelineService(ABC):
     """
 
     @abstractmethod
-    def store_software_guideline(self, software_guideline: SoftwareGuideline, path: str) -> int:
+    def store_software_guideline(
+        self, software_guideline: SoftwareGuideline
+    ) -> Optional[int]:
         """
         Stores software guideline and links it to a module path, returning its ID.
         """
@@ -38,7 +40,10 @@ class SoftwareGuidelineService(ABC):
 
     @abstractmethod
     def update_guideline_status(
-        self, msf_path: str, status: str, guideline_text: Optional[str] = None
+        self,
+        msf_path: str,
+        status: GuidelineStatus,
+        guideline_text: Optional[str] = None,
     ) -> None:
         """
         Updates the status (and optionally modifies text) of the latest software guideline linked to msf_path.

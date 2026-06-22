@@ -2,73 +2,73 @@ from enum import Enum
 from typing import List, Optional
 from pydantic import BaseModel, Field
 from .records import (
-    MSFModuleRecord,
-    SoftwareRecord,
     OSGuidelineRecord,
     SoftwareGuidelineRecord,
+    MSFModuleRecord,
+    SoftwareRecord,
 )
 
 
-class MetasploitModuleDetails(BaseModel):
-    module_id: Optional[int] = None
-    software_id: Optional[int] = None
-    description: str
-    cves: List[str]
-    type: str = ""
-    name: str = ""
-    module_name: str = ""
-    rank: str = ""
-    disclosure_date: str = ""
-    platform: List[str] = Field(default_factory=list)
-    documentation: str = ""
+class MSFModule(BaseModel):
+    id: Optional[int] = Field(
+        default=None, description="Unique identifier of the module"
+    )
+    path: str = Field(..., description="Module path")
+    display_name: str = Field(..., description="Display name of the module")
+    type: str = Field(..., description="Module type")
+    rank: str = Field(..., description="Module rank")
+    disclosure_date: str = Field(..., description="Disclosure date of the module")
+    platform: List[str] = Field(
+        default_factory=list, description="Platform of the module"
+    )
+    documentation: str = Field(default="", description="Documentation of the module")
+    description: str = Field(default="", description="Description of the module")
 
     @classmethod
-    def from_record(
-        cls, msf_rec: MSFModuleRecord, software_rec: Optional[SoftwareRecord] = None
-    ) -> "MetasploitModuleDetails":
+    def from_record(cls, record: MSFModuleRecord) -> "MSFModule":
         """
-        Maps an MSFModuleRecord and optional SoftwareRecord to MetasploitModuleDetails.
+        Maps a MSFModuleRecord to MSFModule.
         """
         return cls(
-            module_id=msf_rec.id,
-            software_id=software_rec.id if software_rec else None,
-            description=msf_rec.description,
-            cves=software_rec.cves if software_rec else [],
-            type=msf_rec.type,
-            name=msf_rec.display_name,
-            module_name=msf_rec.name,
-            rank=msf_rec.rank,
-            disclosure_date=msf_rec.disclosure_date,
-            platform=msf_rec.platform,
-            documentation=msf_rec.documentation,
+            id=record.id,
+            path=record.path,
+            display_name=record.display_name,
+            type=record.type,
+            rank=record.rank,
+            disclosure_date=record.disclosure_date,
+            platform=record.platforms,
+            documentation=record.documentation,
+            description=record.description,
         )
 
 
-class VulnerabilityTarget(BaseModel):
-    id: Optional[int] = None
-    software_name: str = Field(
-        ..., description="Normalized generic name of the application"
+class Software(BaseModel):
+    id: Optional[int] = Field(
+        default=None, description="Unique identifier of the software"
     )
+    path: str = Field(..., description="Path of the software")
+    name: str = Field(..., description="Name of the software")
+    cves: List[str] = Field(default_factory=list, description="CVEs of the software")
     vulnerable_versions: List[str] = Field(
         default_factory=list,
-        description="Explicit version number array, e.g., ['9.0.30']",
+        description="Vulnerable versions of the software",
     )
     required_configs: List[str] = Field(
-        default_factory=list,
-        description="Explicit application environment flags, e.g., ['AJP connector enabled']",
+        default_factory=list, description="Required configurations of the software"
     )
 
     @classmethod
     def from_record(
         cls,
         software_rec: SoftwareRecord,
-    ) -> "VulnerabilityTarget":
+    ) -> "Software":
         """
-        Maps a SoftwareRecord to VulnerabilityTarget.
+        Maps a SoftwareRecord to Software.
         """
         return cls(
             id=software_rec.id,
-            software_name=software_rec.name,
+            path=software_rec.path,
+            name=software_rec.name,
             vulnerable_versions=software_rec.vulnerable_versions,
             required_configs=software_rec.required_configs,
         )
@@ -114,11 +114,11 @@ class OSGuideline(BaseModel):
 
 class SoftwareGuideline(BaseModel):
     id: Optional[int] = None
-    path: str = ""
-    guideline: str
-    os_guideline_id: int
-    software_id: int
-    status: GuidelineStatus = GuidelineStatus.UNVERIFIED
+    path: str = Field(..., description="MSF module path")
+    guideline: str = Field(..., description="Software guideline")
+    os_guideline_id: int = Field(..., description="OS guideline ID")
+    software_id: int = Field(..., description="Software ID")
+    status: GuidelineStatus = Field(..., description="Guideline status")
 
     @classmethod
     def from_record(cls, record: SoftwareGuidelineRecord) -> "SoftwareGuideline":

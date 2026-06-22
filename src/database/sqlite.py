@@ -8,7 +8,7 @@ class SQLiteDatabaseManager(DatabaseManager):
     Manages the SQLite database connection and schema initialization.
     """
 
-    def __init__(self, db_path: str = "lab_hub.db"):
+    def __init__(self, db_path: str = "data.sqlite"):
         self.db_path = db_path
         self._logger = logging.getLogger(self.__class__.__name__)
 
@@ -29,7 +29,6 @@ class SQLiteDatabaseManager(DatabaseManager):
             CREATE TABLE IF NOT EXISTS msf_modules (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 path TEXT UNIQUE NOT NULL,
-                name TEXT,
                 display_name TEXT,
                 type TEXT,
                 rank TEXT,

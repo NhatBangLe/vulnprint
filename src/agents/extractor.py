@@ -1,12 +1,27 @@
+from utils import handle_validation_error
 import asyncio
 from typing import Optional, List
 import logging
 from langchain_core.tools import BaseTool
 from langchain.agents.middleware import ToolCallLimitMiddleware
 from langchain.agents import create_agent
-from pydantic import ValidationError
+from pydantic import ValidationError, BaseModel, Field
 from langchain_openai import ChatOpenAI
-from models import VulnerabilityTarget
+
+
+class VulnerabilityTarget(BaseModel):
+    id: Optional[int] = None
+    software_name: str = Field(
+        ..., description="Normalized generic name of the application"
+    )
+    vulnerable_versions: List[str] = Field(
+        default_factory=list,
+        description="Explicit version number array, e.g., ['9.0.30']",
+    )
+    required_configs: List[str] = Field(
+        default_factory=list,
+        description="Explicit application environment flags, e.g., ['AJP connector enabled']",
+    )
 
 
 class VulnerabilityTargetExtractorAgent:
@@ -77,16 +92,7 @@ class VulnerabilityTargetExtractorAgent:
                 return None
             return parsed_content
         except ValidationError as e:
-            self._logger.error("Pydantic Validation Failed!")
-
-            # Loop through errors to see exactly what broke and what the text looked like
-            for error in e.errors():
-                self._logger.error(
-                    "Error Message: {msg}."
-                    "\nError Location: {loc}, "
-                    "Error Type: {type}, "
-                    "Input:\n{input}".format(**error)
-                )
+            handle_validation_error(e, self._logger)
             return None
         except Exception as e:
             self._logger.error(f"Error during LLM analysis: {e}")

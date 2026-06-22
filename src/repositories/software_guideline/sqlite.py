@@ -12,9 +12,11 @@ class SQLiteSoftwareGuidelineRepository(SoftwareGuidelineRepository):
         self.db_manager: SQLiteDatabaseManager = db_manager
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def store_software_guideline(
-        self, record: SoftwareGuidelineRecord, path: str
-    ) -> int:
+    def save(self, record: SoftwareGuidelineRecord) -> Optional[int]:
+        existing_id = self.exists_by_path(record.path)
+        if existing_id:
+            return self._update_by_id(existing_id, record)
+
         conn = None
         try:
             conn = self.db_manager.get_connection()
@@ -37,20 +39,59 @@ class SQLiteSoftwareGuidelineRepository(SoftwareGuidelineRepository):
                 INSERT INTO module_guidelines (module_path, guideline_id)
                 VALUES (?, ?);
                 """,
-                (path, guideline_id),
+                (record.path, guideline_id),
             )
             conn.commit()
             return guideline_id
         except Exception as e:
-            self._logger.error(f"Error storing software guideline for {path}: {e}")
-            raise
+            self._logger.error(
+                f"Error storing software guideline for {record.path}: {e}"
+            )
+            return None
         finally:
             if conn:
                 conn.close()
 
-    def get_software_guideline(
-        self, guideline_id: int
-    ) -> Optional[SoftwareGuidelineRecord]:
+    def exists_by_id(self, guideline_id: int) -> bool:
+        conn = None
+        try:
+            conn = self.db_manager.get_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT 1 FROM software_guidelines WHERE id = ? LIMIT 1;",
+                (guideline_id,),
+            )
+            return cursor.fetchone() is not None
+        except Exception as e:
+            self._logger.error(
+                f"Error checking existence of guideline {guideline_id}: {e}"
+            )
+            return False
+        finally:
+            if conn:
+                conn.close()
+
+    def exists_by_path(self, msf_path: str) -> Optional[int]:
+        conn = None
+        try:
+            conn = self.db_manager.get_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT guideline_id FROM module_guidelines WHERE module_path = ? LIMIT 1;",
+                (msf_path,),
+            )
+            row = cursor.fetchone()
+            return row[0] if row else None
+        except Exception as e:
+            self._logger.error(
+                f"Error checking existence of guideline for path {msf_path}: {e}"
+            )
+            return None
+        finally:
+            if conn:
+                conn.close()
+
+    def get_by_id(self, guideline_id: int) -> Optional[SoftwareGuidelineRecord]:
         conn = None
         try:
             conn = self.db_manager.get_connection()
@@ -69,11 +110,11 @@ class SQLiteSoftwareGuidelineRepository(SoftwareGuidelineRepository):
                 return None
             return SoftwareGuidelineRecord(
                 id=row[0],
-                path=row[5] or "",
                 guideline=row[1],
                 os_guideline_id=row[2],
                 software_id=row[3],
                 status=row[4] or "UNVERIFIED",
+                path=row[5] or "",
                 created_at=row[6],
                 updated_at=row[7],
             )
@@ -86,9 +127,7 @@ class SQLiteSoftwareGuidelineRepository(SoftwareGuidelineRepository):
             if conn:
                 conn.close()
 
-    def get_software_guidelines_by_path(
-        self, msf_path: str
-    ) -> List[SoftwareGuidelineRecord]:
+    def get_by_path(self, msf_path: str) -> List[SoftwareGuidelineRecord]:
         conn = None
         try:
             conn = self.db_manager.get_connection()
@@ -161,55 +200,6 @@ class SQLiteSoftwareGuidelineRepository(SoftwareGuidelineRepository):
         except Exception as e:
             self._logger.error(f"Error querying unverified guidelines: {e}")
             return []
-        finally:
-            if conn:
-                conn.close()
-
-    def update_guideline_status(
-        self, msf_path: str, status: str, guideline: Optional[str] = None
-    ) -> None:
-        conn = None
-        try:
-            conn = self.db_manager.get_connection()
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                SELECT guideline_id 
-                FROM module_guidelines 
-                WHERE module_path = ? 
-                ORDER BY guideline_id DESC LIMIT 1;
-                """,
-                (msf_path,),
-            )
-            row = cursor.fetchone()
-            if row:
-                guideline_id = row[0]
-                if guideline is not None:
-                    cursor.execute(
-                        """
-                        UPDATE software_guidelines 
-                        SET status = ?, guideline = ?, updated_at = CURRENT_TIMESTAMP 
-                        WHERE id = ?;
-                        """,
-                        (status, guideline, guideline_id),
-                    )
-                else:
-                    cursor.execute(
-                        """
-                        UPDATE software_guidelines 
-                        SET status = ?, updated_at = CURRENT_TIMESTAMP 
-                        WHERE id = ?;
-                        """,
-                        (status, guideline_id),
-                    )
-                conn.commit()
-            else:
-                self._logger.warning(
-                    f"No guideline found to update for path: {msf_path}"
-                )
-        except Exception as e:
-            self._logger.error(f"Error updating guideline status for {msf_path}: {e}")
-            raise
         finally:
             if conn:
                 conn.close()
@@ -331,6 +321,42 @@ class SQLiteSoftwareGuidelineRepository(SoftwareGuidelineRepository):
                 f"Error retrieving guidelines with software metadata: {e}"
             )
             return []
+        finally:
+            if conn:
+                conn.close()
+
+    def _update_by_id(
+        self, guideline_id: int, record: SoftwareGuidelineRecord
+    ) -> Optional[int]:
+        conn = None
+        try:
+            conn = self.db_manager.get_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE software_guidelines
+                SET guideline = ?, os_guideline_id = ?, software_id = ?, status = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?;
+                """,
+                (
+                    record.guideline,
+                    record.os_guideline_id,
+                    record.software_id,
+                    record.status,
+                    guideline_id,
+                ),
+            )
+            if cursor.rowcount == 0:
+                return None
+            conn.commit()
+            return guideline_id
+        except Exception as e:
+            self._logger.error(
+                f"Error updating software guideline for ID {guideline_id}: {e}"
+            )
+            if conn:
+                conn.rollback()
+            return None
         finally:
             if conn:
                 conn.close()

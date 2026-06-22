@@ -5,7 +5,7 @@ import argparse
 import os
 import logging
 from typing import Optional, Tuple
-from models import CLIArguments
+from models import CLIArguments, GuidelineStatus, Software
 from repositories import (
     SQLiteMSFModuleRepository,
     SQLiteSoftwareRepository,
@@ -18,11 +18,11 @@ from services import (
     SoftwareGuidelineService,
     MetasploitRPCService,
     MSFModuleService,
-    VulnerabilityTargetService,
+    SoftwareService,
     MarkdownBlueprintService,
     CLIAnalyticsService,
     DefaultMSFModuleService,
-    DefaultVulnerabilityTargetService,
+    DefaultSoftwareService,
     DefaultOSGuidelineService,
     DefaultSoftwareGuidelineService,
 )
@@ -142,7 +142,7 @@ def setup_database_and_services(
     db_path: str,
 ) -> Tuple[
     MSFModuleService,
-    VulnerabilityTargetService,
+    SoftwareService,
     OSGuidelineService,
     SoftwareGuidelineService,
 ]:
@@ -160,17 +160,17 @@ def setup_database_and_services(
     msf_service = DefaultMSFModuleService(
         msf_repo=msf_repo, software_repo=software_repo
     )
-    vuln_service = DefaultVulnerabilityTargetService(software_repo=software_repo)
+    soft_service = DefaultSoftwareService(software_repo=software_repo)
     os_guide_service = DefaultOSGuidelineService(os_guide_repo=os_guide_repo)
     sw_guide_service = DefaultSoftwareGuidelineService(sw_guide_repo=sw_guide_repo)
 
-    return msf_service, vuln_service, os_guide_service, sw_guide_service
+    return msf_service, soft_service, os_guide_service, sw_guide_service
 
 
 def handle_review_mode(
     os_guide_service: OSGuidelineService,
     sw_guide_service: SoftwareGuidelineService,
-    vuln_service: VulnerabilityTargetService,
+    soft_service: SoftwareService,
     msf_service: MSFModuleService,
     logger: logging.Logger,
 ) -> None:
@@ -187,15 +187,11 @@ def handle_review_mode(
         guideline = sw_guide.guideline
 
         # Map associated info for display using services and domain models
-        vuln_target = vuln_service.get_vulnerability_target(path)
-        software_name = vuln_target.software_name if vuln_target else "Unknown"
+        software = soft_service.get_software_by_path(path)
+        software_name = software.name if software else "Unknown"
+        cves = software.cves if software else []
 
-        msf_details = msf_service.get_module_details(path)
-        cves = (
-            ", ".join(msf_details.cves) if msf_details and msf_details.cves else "None"
-        )
-
-        os_guide = os_guide_service.get_os_guideline(sw_guide.os_guideline_id)
+        os_guide = os_guide_service.get_os_guideline_by_id(sw_guide.os_guideline_id)
         os_name = os_guide.os_name if os_guide else "Unknown OS"
         os_guideline_text = (
             os_guide.guideline if os_guide else "No OS setup instructions."
@@ -222,7 +218,7 @@ def handle_review_mode(
                 .lower()
             )
             if choice in ["1", "approve", "a"]:
-                sw_guide_service.update_guideline_status(path, "VERIFIED")
+                sw_guide_service.update_guideline_status(path, GuidelineStatus.VERIFIED)
                 logger.info(f"Approved and marked guideline for {path} as VERIFIED.")
                 break
             elif choice in ["2", "modify", "m"]:
@@ -258,7 +254,7 @@ def handle_review_mode(
                         modified_guideline = tf.read()
 
                     sw_guide_service.update_guideline_status(
-                        path, "VERIFIED", modified_guideline
+                        path, GuidelineStatus.VERIFIED, modified_guideline
                     )
                     logger.info(
                         f"Marked guideline for {path} as VERIFIED with your modifications."
@@ -271,7 +267,7 @@ def handle_review_mode(
                     logger.error("Temporary file not found. Skipping modification.")
                 break
             elif choice in ["3", "reject", "r"]:
-                sw_guide_service.update_guideline_status(path, "REJECTED")
+                sw_guide_service.update_guideline_status(path, GuidelineStatus.REJECTED)
                 logger.info(f"Marked guideline for {path} as REJECTED.")
                 break
             elif choice in ["4", "skip", "s"]:
@@ -307,7 +303,7 @@ def handle_export_guide_mode(
 
     output_parts = []
     for sw_guide in sw_guidelines:
-        os_guide = os_guide_service.get_os_guideline(sw_guide.os_guideline_id)
+        os_guide = os_guide_service.get_os_guideline_by_id(sw_guide.os_guideline_id)
         os_name = os_guide.os_name if os_guide else "Unknown OS"
         os_text = os_guide.guideline if os_guide else "No OS setup instructions."
         output_parts.append(
@@ -339,12 +335,12 @@ def handle_export_guide_mode(
 def handle_analytics_mode(
     args: CLIArguments,
     msf_service: MSFModuleService,
-    vuln_service: VulnerabilityTargetService,
+    soft_service: SoftwareService,
     sw_guide_service: SoftwareGuidelineService,
 ) -> None:
     analytics_service = CLIAnalyticsService(
         msf_service=msf_service,
-        vuln_service=vuln_service,
+        soft_service=soft_service,
         sw_guide_service=sw_guide_service,
     )
     if args.summary:
@@ -365,7 +361,7 @@ def handle_analytics_mode(
 def handle_search_ingestion(
     args: CLIArguments,
     msf_service: MSFModuleService,
-    vuln_service: VulnerabilityTargetService,
+    soft_service: SoftwareService,
     os_guide_service: OSGuidelineService,
     sw_guide_service: SoftwareGuidelineService,
     logger: logging.Logger,
@@ -411,7 +407,7 @@ def handle_search_ingestion(
     )
     vm_guideline_generator_agent = VMGuidelineGeneratorAgent(
         msf_service=msf_service,
-        vuln_service=vuln_service,
+        soft_service=soft_service,
         ai_base_url=settings.ai_base_url,
         ai_api_key=settings.ai_api_key,
         ai_model=settings.ai_model,
@@ -422,7 +418,7 @@ def handle_search_ingestion(
     # Initialize blueprint service
     blueprint_service = MarkdownBlueprintService(
         msf_service=msf_service,
-        vuln_service=vuln_service,
+        soft_service=soft_service,
         output_dir=settings.blueprints_dir,
         os_guide_service=os_guide_service,
         sw_guide_service=sw_guide_service,
@@ -450,8 +446,8 @@ def handle_search_ingestion(
         logger.info(f"[{idx}/{len(module_paths)}] Processing: {path}")
 
         # Fetch module details from Metasploit
-        details = metasploit_service.get_module_details(path)
-        desc = details.description
+        module_details = metasploit_service.get_module_details(path)
+        desc = module_details.description
         if not desc or len(desc.strip()) == 0:
             logger.warning(
                 f"[{idx}/{len(module_paths)}] Module description is empty. Skipping model analysis."
@@ -461,7 +457,7 @@ def handle_search_ingestion(
                 f"[{idx}/{len(module_paths)}] Interrogating AI model ({settings.ai_model}) to extract software metadata..."
             )
             slm_data = extractor.extract(
-                description=desc, documentation=details.documentation
+                description=desc, documentation=module_details.documentation
             )
 
             if slm_data is None:
@@ -473,8 +469,16 @@ def handle_search_ingestion(
         logger.info(
             f"[{idx}/{len(module_paths)}] Recording intelligence in database ledger..."
         )
-        msf_service.store_module_details(details)
-        vuln_service.store_vulnerability_target(path, slm_data)
+        msf_service.store_module(module_details)
+        soft_service.store_software(
+            Software(
+                path=path,
+                cves=module_details.cves,
+                vulnerable_versions=slm_data.vulnerable_versions,
+                required_configs=slm_data.required_configs,
+                name=slm_data.software_name,
+            )
+        )
 
         # Generate Markdown Lab Blueprint Manual
         blueprint_file = blueprint_service.generate_blueprint(path)
@@ -502,7 +506,7 @@ def main():
     args = parse_args()
 
     logger.info("Initializing database and services...")
-    msf_service, vuln_service, os_guide_service, sw_guide_service = (
+    msf_service, soft_service, os_guide_service, sw_guide_service = (
         setup_database_and_services(
             db_path=settings.database_path,
         )
@@ -519,7 +523,7 @@ def main():
     ):
         if args.review:
             handle_review_mode(
-                os_guide_service, sw_guide_service, vuln_service, msf_service, logger
+                os_guide_service, sw_guide_service, soft_service, msf_service, logger
             )
         elif args.export_guide:
             handle_export_guide_mode(
@@ -530,12 +534,12 @@ def main():
                 logger=logger,
             )
         else:
-            handle_analytics_mode(args, msf_service, vuln_service, sw_guide_service)
+            handle_analytics_mode(args, msf_service, soft_service, sw_guide_service)
     elif args.search:
         handle_search_ingestion(
             args=args,
             msf_service=msf_service,
-            vuln_service=vuln_service,
+            soft_service=soft_service,
             os_guide_service=os_guide_service,
             sw_guide_service=sw_guide_service,
             logger=logger,

@@ -13,18 +13,23 @@ class SQLiteSoftwareRepository(SoftwareRepository):
 
     def __init__(self, db_manager: DatabaseManager):
         if not isinstance(db_manager, SQLiteDatabaseManager):
-            raise TypeError("db_manager must be an instance of DatabaseManager")
+            raise TypeError("db_manager must be an instance of SQLiteDatabaseManager")
         self.db_manager: SQLiteDatabaseManager = db_manager
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def store_software_details(self, record: SoftwareRecord) -> None:
+    def save(self, record: SoftwareRecord) -> int:
+        existing_id = self.exists_by_path(record.path)
+        if existing_id:
+            return self._update_by_id(existing_id, record)
+
         conn = None
         try:
             conn = self.db_manager.get_connection()
             cursor = conn.cursor()
+
             cursor.execute(
                 """
-            INSERT OR REPLACE INTO software (path, name, cves, vulnerable_versions, required_configs)
+            INSERT INTO software (path, name, cves, vulnerable_versions, required_configs)
             VALUES (?, ?, ?, ?, ?);
             """,
                 (
@@ -36,16 +41,79 @@ class SQLiteSoftwareRepository(SoftwareRepository):
                 ),
             )
             conn.commit()
+            return cursor.lastrowid
         except Exception as e:
-            self._logger.error(
-                f"Error storing software details for {record.path}: {e}"
-            )
+            self._logger.error(f"Error storing software details for {record.path}: {e}")
             raise
         finally:
             if conn:
                 conn.close()
 
-    def get_software_details(self, msf_path: str) -> Optional[SoftwareRecord]:
+    def exists_by_id(self, software_id: int) -> bool:
+        conn = None
+        try:
+            conn = self.db_manager.get_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT 1 FROM software WHERE id = ?;",
+                (software_id,),
+            )
+            return bool(cursor.fetchone())
+        except Exception as e:
+            self._logger.error(f"Error checking software existence by id: {e}")
+            return False
+        finally:
+            if conn:
+                conn.close()
+
+    def exists_by_path(self, msf_path: str) -> Optional[int]:
+        conn = None
+        try:
+            conn = self.db_manager.get_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT id FROM software WHERE path = ?;",
+                (msf_path,),
+            )
+            row = cursor.fetchone()
+            return row[0] if row else None
+        except Exception as e:
+            self._logger.error(f"Error checking software existence by path: {e}")
+            return None
+        finally:
+            if conn:
+                conn.close()
+
+    def get_by_id(self, software_id: int) -> Optional[SoftwareRecord]:
+        conn = None
+        try:
+            conn = self.db_manager.get_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT id, path, name, cves, vulnerable_versions, required_configs FROM software WHERE id = ?;",
+                (software_id,),
+            )
+            row = cursor.fetchone()
+            if not row:
+                return None
+            return SoftwareRecord(
+                id=row[0],
+                path=row[1],
+                name=row[2],
+                cves=json.loads(row[3]) if row[3] else [],
+                vulnerable_versions=json.loads(row[4]) if row[4] else [],
+                required_configs=json.loads(row[5]) if row[5] else [],
+            )
+        except Exception as e:
+            self._logger.error(
+                f"Error retrieving software details for {software_id}: {e}"
+            )
+            return None
+        finally:
+            if conn:
+                conn.close()
+
+    def get_by_path(self, msf_path: str) -> Optional[SoftwareRecord]:
         conn = None
         try:
             conn = self.db_manager.get_connection()
@@ -66,15 +134,13 @@ class SQLiteSoftwareRepository(SoftwareRepository):
                 required_configs=json.loads(row[5]) if row[5] else [],
             )
         except Exception as e:
-            self._logger.error(
-                f"Error retrieving software details for {msf_path}: {e}"
-            )
+            self._logger.error(f"Error retrieving software details for {msf_path}: {e}")
             return None
         finally:
             if conn:
                 conn.close()
 
-    def get_top_technologies(self, limit: int = 10) -> List[Tuple[str, int]]:
+    def get_top_software(self, limit: int = 10) -> List[Tuple[str, int]]:
         conn = None
         try:
             conn = self.db_manager.get_connection()
@@ -136,6 +202,35 @@ class SQLiteSoftwareRepository(SoftwareRepository):
         except Exception as e:
             self._logger.error(f"Error querying configurations: {e}")
             return []
+        finally:
+            if conn:
+                conn.close()
+
+    def _update_by_id(self, software_id: int, record: SoftwareRecord) -> Optional[int]:
+        conn = None
+        try:
+            conn = self.db_manager.get_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE software SET cves = ?, vulnerable_versions = ?, required_configs = ? WHERE id = ?;
+                """,
+                (
+                    json.dumps(record.cves),
+                    json.dumps(record.vulnerable_versions),
+                    json.dumps(record.required_configs),
+                    software_id,
+                ),
+            )
+            conn.commit()
+            return software_id
+        except Exception as e:
+            self._logger.error(
+                f"Error updating software details for {software_id}: {e}"
+            )
+            if conn:
+                conn.rollback()
+            return None
         finally:
             if conn:
                 conn.close()

@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     blueprints_dir: str = Field(
         "vulnprint_blueprints", validation_alias="BLUEPRINTS_DIR"
     )
-    database_path: str = Field("lab_hub.db", validation_alias="DATABASE_PATH")
+    database_path: str = Field("data.sqlite", validation_alias="DATABASE_PATH")
     log_level: str = Field("INFO", validation_alias="LOG_LEVEL")
 
     mcp_search_url: str = Field(

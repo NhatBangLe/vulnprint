@@ -9,21 +9,42 @@ class SoftwareRepository(ABC):
     """
 
     @abstractmethod
-    def store_software_details(self, record: SoftwareRecord) -> None:
+    def save(self, record: SoftwareRecord) -> int:
         """
         Stores or updates software vulnerability details in the database.
         """
         pass
 
     @abstractmethod
-    def get_software_details(self, msf_path: str) -> Optional[SoftwareRecord]:
+    def exists_by_id(self, software_id: int) -> bool:
+        """
+        Checks if software details exists for the given software id.
+        """
+        pass
+
+    @abstractmethod
+    def exists_by_path(self, msf_path: str) -> Optional[int]:
+        """
+        Checks if software details exists for the given module path.
+        """
+        pass
+
+    @abstractmethod
+    def get_by_id(self, software_id: int) -> Optional[SoftwareRecord]:
+        """
+        Retrieves software details for the given software id.
+        """
+        pass
+
+    @abstractmethod
+    def get_by_path(self, msf_path: str) -> Optional[SoftwareRecord]:
         """
         Retrieves software details for the given module path.
         """
         pass
 
     @abstractmethod
-    def get_top_technologies(self, limit: int = 10) -> List[Tuple[str, int]]:
+    def get_top_software(self, limit: int = 10) -> List[Tuple[str, int]]:
         """
         Queries top software/technologies by count.
         """

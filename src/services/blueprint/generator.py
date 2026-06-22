@@ -1,3 +1,5 @@
+from utils import handle_validation_error
+from pydantic import ValidationError
 import os
 import logging
 import json
@@ -5,11 +7,11 @@ from typing import Optional, List
 from .base import BlueprintService
 from services import (
     MSFModuleService,
-    VulnerabilityTargetService,
+    SoftwareService,
     OSGuidelineService,
     SoftwareGuidelineService,
 )
-from models import VulnerabilityTarget, GuidelineStatus
+from models import GuidelineStatus, Software
 from agents import VMGuidelineGeneratorAgent
 
 
@@ -21,14 +23,14 @@ class MarkdownBlueprintService(BlueprintService):
     def __init__(
         self,
         msf_service: MSFModuleService,
-        vuln_service: VulnerabilityTargetService,
+        soft_service: SoftwareService,
         os_guide_service: OSGuidelineService,
         sw_guide_service: SoftwareGuidelineService,
         vm_guideline_generator_agent: VMGuidelineGeneratorAgent,
         output_dir: str = "vulnprint_blueprints/",
     ):
         self.msf_service = msf_service
-        self.vuln_service = vuln_service
+        self.soft_service = soft_service
         self.output_dir = output_dir
         self.os_guide_service = os_guide_service
         self.sw_guide_service = sw_guide_service
@@ -36,30 +38,22 @@ class MarkdownBlueprintService(BlueprintService):
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def generate_blueprint(self, msf_path: str) -> Optional[str]:
-        """
-        Reads database DTO records, maps them to domain models, and generates a beautiful,
-        standardized Markdown blueprint manual.
-        """
         try:
-            # Query services for domain models
-            msf_details = self.msf_service.get_module_details(msf_path)
-            if not msf_details:
+            msf_module = self.msf_service.get_module_by_path(msf_path)
+            if not msf_module:
                 self._logger.error(f"Module path '{msf_path}' not found.")
                 return None
 
-            vuln_target = self.vuln_service.get_vulnerability_target(msf_path)
-            if not vuln_target:
-                vuln_target = VulnerabilityTarget(software_name="Unknown")
+            software = self.soft_service.get_software_by_path(msf_path)
+            if not software:
+                software = Software(path=msf_path, name="Unknown")
 
-            cves = msf_details.cves
-            software_name = vuln_target.software_name
-            vulnerable_versions = vuln_target.vulnerable_versions
-            required_configs = vuln_target.required_configs
-            os_guideline_text: Optional[str] = None
-            software_guideline_text: Optional[str] = None
-            os_name: str = "Unknown OS"
+            data = {
+                "os_name": None,
+                "os_guideline": None,
+                "software_guideline": None,
+            }
 
-            # Retrieve Software guidelines from VM Guideline Service
             self._logger.info(f"Querying Software guideline for {msf_path}")
             sw_guidelines = self.sw_guide_service.get_software_guidelines_by_path(
                 msf_path
@@ -72,28 +66,28 @@ class MarkdownBlueprintService(BlueprintService):
                 selected_sw_guide = (
                     verified_guide if verified_guide else sw_guidelines[0]
                 )
-                software_guideline_text = selected_sw_guide.guideline
+                data["software_guideline"] = selected_sw_guide.guideline
 
                 # Fetch corresponding OS Guideline
-                os_guide = self.os_guide_service.get_os_guideline(
+                os_guide = self.os_guide_service.get_os_guideline_by_id(
                     selected_sw_guide.os_guideline_id
                 )
                 if os_guide:
-                    os_guideline_text = os_guide.guideline
-                    os_name = os_guide.os_name
+                    data["os_guideline"] = os_guide.guideline
+                    data["os_name"] = os_guide.os_name
             else:
                 self._logger.info(
                     f"Guideline for {msf_path} not directly found. Searching for suitable existing guideline..."
                 )
                 potential_guides = self.sw_guide_service.find_all_potential_guidelines(
-                    platform=msf_details.platform,
-                    software_name=software_name,
-                    vulnerable_versions=vulnerable_versions,
+                    platform=msf_module.platform,
+                    software_name=software.name,
+                    vulnerable_versions=software.vulnerable_versions,
                 )
                 if potential_guides:
                     self._logger.info(
                         f"Found {len(potential_guides)} suitable existing guideline(s) covering "
-                        f"software '{software_name}'. Linking to {msf_path}."
+                        f"software '{software.name}'. Linking to {msf_path}."
                     )
                     # Link to all suitable guides
                     for _, guideline in potential_guides:
@@ -101,13 +95,14 @@ class MarkdownBlueprintService(BlueprintService):
                             msf_path, guideline.id
                         )
                     highest_score_guide = max(potential_guides, key=lambda x: x[0])[1]
-                    software_guideline_text = highest_score_guide.guideline
-                    os_guide = self.os_guide_service.get_os_guideline(
+                    os_guide = self.os_guide_service.get_os_guideline_by_id(
                         highest_score_guide.os_guideline_id
                     )
+
+                    data["software_guideline"] = highest_score_guide.guideline
                     if os_guide:
-                        os_guideline_text = os_guide.guideline
-                        os_name = os_guide.os_name
+                        data["os_guideline"] = os_guide.guideline
+                        data["os_name"] = os_guide.os_name
                 else:
                     self._logger.warning(
                         f"No suitable guideline found in database for {msf_path}. Regenerating using AI Agent..."
@@ -119,22 +114,30 @@ class MarkdownBlueprintService(BlueprintService):
                         os_guideline_id = self.os_guide_service.store_os_guideline(
                             os_guide
                         )
+                        if os_guideline_id is None:
+                            raise Exception(
+                                f"Failed to store OS guideline for {msf_path}"
+                            )
 
                         # 2. Update software guideline fields and store it
                         sw_guide.os_guideline_id = os_guideline_id
                         sw_guide.software_id = (
-                            vuln_target.id if vuln_target and vuln_target.id else 1
+                            software.id if software and software.id else 1
                         )
+                        sw_guide_id = self.sw_guide_service.store_software_guideline(
+                            sw_guide
+                        )
+                        if sw_guide_id is None:
+                            raise Exception(
+                                f"Failed to store software guideline for {msf_path}"
+                            )
 
-                        self.sw_guide_service.store_software_guideline(
-                            sw_guide, msf_path
-                        )
                         self._logger.info(
                             f"Stored the newly generated OS and Software guidelines for {msf_path}"
                         )
-                        os_guideline_text = os_guide.guideline
-                        os_name = os_guide.os_name
-                        software_guideline_text = sw_guide.guideline
+                        data["os_guideline"] = os_guide.guideline
+                        data["os_name"] = os_guide.os_name
+                        data["software_guideline"] = sw_guide.guideline
                     else:
                         self._logger.error(
                             f"Failed to generate guideline for {msf_path}. Using fallback instructions."
@@ -143,19 +146,21 @@ class MarkdownBlueprintService(BlueprintService):
             # Build the exact template layout required
             template = self._build_markdown_template(
                 msf_path=msf_path,
-                cves=cves,
-                vulnerable_versions=vulnerable_versions,
-                required_configs=required_configs,
-                os_name=os_name,
-                os_guideline=os_guideline_text,
-                software_guideline=software_guideline_text,
-                software_name=software_name,
+                cves=software.cves,
+                vulnerable_versions=software.vulnerable_versions,
+                required_configs=software.required_configs,
+                os_name=data["os_name"],
+                os_guideline=data["os_guideline"],
+                software_guideline=data["software_guideline"],
+                software_name=software.name,
             )
 
             return self._export_blueprint_file(
-                template=template, cves=cves, msf_path=msf_path
+                template=template, cves=software.cves, msf_path=msf_path
             )
-
+        except ValidationError as e:
+            handle_validation_error(e, self._logger)
+            return None
         except Exception as e:
             self._logger.error(f"Error generating blueprint manual for {msf_path}: {e}")
             return None
@@ -187,7 +192,7 @@ class MarkdownBlueprintService(BlueprintService):
         cves: List[str],
         vulnerable_versions: List[str],
         required_configs: List[str],
-        os_name: str,
+        os_name: Optional[str],
         os_guideline: Optional[str],
         software_guideline: Optional[str],
         software_name: str,

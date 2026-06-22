@@ -6,8 +6,9 @@ from langchain_core.tools import BaseTool
 from langchain_openai import ChatOpenAI
 from langchain.agents import create_agent
 from langchain.agents.middleware import ToolCallLimitMiddleware
-from services import MSFModuleService, VulnerabilityTargetService
+from services import MSFModuleService, SoftwareService
 from models import OSGuideline, SoftwareGuideline, GuidelineStatus
+from utils import handle_validation_error
 
 
 class VMGuidelineGeneratorResult(BaseModel):
@@ -21,11 +22,11 @@ class VMGuidelineGeneratorResult(BaseModel):
     )
     os_guideline: str = Field(
         ...,
-        description="A detailed step-by-step Operating System Installation Guideline, including VM requirements, download sources, and OS setup steps.",
+        description="A detailed step-by-step Operating System Installation Guideline, including VM requirements, download sources, and OS setup steps in markdown format.",
     )
     software_guideline: str = Field(
         ...,
-        description="A detailed step-by-step Software Installation Guideline for installing the vulnerable target software/version on the chosen OS.",
+        description="A detailed step-by-step Software Installation Guideline for installing the vulnerable target software/version on the chosen OS in markdown format.",
     )
 
 
@@ -33,7 +34,7 @@ class VMGuidelineGeneratorAgent:
     def __init__(
         self,
         msf_service: MSFModuleService,
-        vuln_service: VulnerabilityTargetService,
+        soft_service: SoftwareService,
         ai_base_url: str,
         ai_api_key: str,
         ai_model: str,
@@ -42,7 +43,7 @@ class VMGuidelineGeneratorAgent:
         temperature: float = 0.4,
     ):
         self.msf_service = msf_service
-        self.vuln_service = vuln_service
+        self.soft_service = soft_service
 
         self.ai_base_url = ai_base_url
         self.ai_api_key = ai_api_key
@@ -85,40 +86,38 @@ class VMGuidelineGeneratorAgent:
             f"Starting agentic guideline generation workflow for module: {msf_path}"
         )
 
-        msf_details = self.msf_service.get_module_details(msf_path)
-        if not msf_details:
+        msf_module = self.msf_service.get_module_by_path(msf_path)
+        if not msf_module:
             self._logger.error(f"Module not found in database: {msf_path}")
             return None
 
-        vuln_target = self.vuln_service.get_vulnerability_target(msf_path)
-        if not vuln_target:
-            self._logger.error(
-                f"Vulnerability target not found in database: {msf_path}"
-            )
+        software = self.soft_service.get_software_by_path(msf_path)
+        if not software:
+            self._logger.error(f"Software not found in database: {msf_path}")
             return None
 
-        cves_str = ", ".join(msf_details.cves) if msf_details.cves else "None"
+        cves_str = ", ".join(software.cves) if software.cves else "None"
         versions_str = (
-            ", ".join(vuln_target.vulnerable_versions)
-            if vuln_target.vulnerable_versions
+            ", ".join(software.vulnerable_versions)
+            if software.vulnerable_versions
             else "Unknown"
         )
         configs_str = (
-            "; ".join(vuln_target.required_configs)
-            if vuln_target.required_configs
+            "; ".join(software.required_configs)
+            if software.required_configs
             else "None"
         )
 
         try:
             user_content = (
                 f"Generate a Virtual Machine OS and Software Installation Guideline for this Metasploit module:\n"
-                f"Module Path: {msf_details.module_name}\n"
+                f"Module Path: {msf_module.path}\n"
+                f"Description: {msf_module.description}\n"
                 f"Associated CVEs: {cves_str}\n"
-                f"Software Target: {vuln_target.software_name}\n"
+                f"Software Target: {software.name}\n"
+                f"Available target platforms: {msf_module.platform}\n"
                 f"Vulnerable Versions: {versions_str}\n"
                 f"Required Configurations: {configs_str}\n"
-                f"Description: {msf_details.description}\n"
-                f"Available target platforms: {msf_details.platform}\n"
             )
 
             result = asyncio.run(
@@ -145,17 +144,11 @@ class VMGuidelineGeneratorAgent:
                     os_guideline_id=0,
                     software_id=0,
                     status=GuidelineStatus.UNVERIFIED,
+                    path=msf_path,
                 ),
             )
         except ValidationError as e:
-            self._logger.error(f"Validation error: {e}")
-            for error in e.errors():
-                self._logger.error(
-                    "Error Message: {msg}."
-                    "\nError Location: {loc}, "
-                    "Error Type: {type}, "
-                    "Input:\n{input}".format(**error)
-                )
+            handle_validation_error(e, self._logger)
             return None
         except Exception as e:
             self._logger.error(f"Error during agent invocation: {e}")

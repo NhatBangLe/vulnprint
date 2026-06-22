@@ -1,6 +1,13 @@
 from typing import List, Tuple, Optional
 from repositories import MSFModuleRepository, SoftwareRepository
-from models import MetasploitModuleDetails, MSFModuleRecord, SoftwareRecord
+from models import (
+    MetasploitModuleDetails,
+    MSFModuleRecord,
+    MSFModule,
+    Software,
+    SoftwareGuideline,
+    OSGuideline,
+)
 from .base import MSFModuleService
 
 
@@ -15,41 +22,42 @@ class DefaultMSFModuleService(MSFModuleService):
         self.msf_repo = msf_repo
         self.software_repo = software_repo
 
-    def store_module_details(self, details: MetasploitModuleDetails) -> None:
-        record = MSFModuleRecord(
-            path=details.module_name,
-            name=details.module_name,
-            display_name=details.name,
-            type=details.type,
-            rank=details.rank,
-            disclosure_date=details.disclosure_date,
-            platform=details.platform,
-            documentation=details.documentation,
-            description=details.description,
-        )
-        self.msf_repo.store_module_metadata(record)
+    def store_module(self, data: MetasploitModuleDetails | MSFModule) -> Optional[int]:
+        if isinstance(data, MetasploitModuleDetails):
+            module_rec = MSFModuleRecord(
+                path=data.module_name,
+                display_name=data.name,
+                type=data.type,
+                rank=data.rank,
+                disclosure_date=data.disclosure_date,
+                platforms=data.platform,
+                documentation=data.documentation,
+                description=data.description,
+            )
+        else:
+            module_rec = MSFModuleRecord(
+                path=data.path,
+                display_name=data.display_name,
+                type=data.type,
+                rank=data.rank,
+                disclosure_date=data.disclosure_date,
+                platforms=data.platform,
+                documentation=data.documentation,
+                description=data.description,
+            )
+        return self.msf_repo.save(module_rec)
 
-        # Retrieve existing software record to keep name, versions & configs
-        existing = self.software_repo.get_software_details(details.module_name)
-        software_name = existing.name if existing else ""
-        versions = existing.vulnerable_versions if existing else []
-        configs = existing.required_configs if existing else []
-
-        software_rec = SoftwareRecord(
-            path=details.module_name,
-            name=software_name,
-            cves=details.cves,
-            vulnerable_versions=versions,
-            required_configs=configs,
-        )
-        self.software_repo.store_software_details(software_rec)
-
-    def get_module_details(self, path: str) -> Optional[MetasploitModuleDetails]:
-        msf_rec = self.msf_repo.get_module_metadata(path)
+    def get_module_by_id(self, module_id: int) -> Optional[MSFModule]:
+        msf_rec = self.msf_repo.get_by_id(module_id)
         if not msf_rec:
             return None
-        software_rec = self.software_repo.get_software_details(path)
-        return MetasploitModuleDetails.from_record(msf_rec, software_rec)
+        return MSFModule.from_record(msf_rec)
+
+    def get_module_by_path(self, path: str) -> Optional[MSFModule]:
+        msf_rec = self.msf_repo.get_by_path(path)
+        if not msf_rec:
+            return None
+        return MSFModule.from_record(msf_rec)
 
     def get_all_paths(self) -> List[str]:
         return self.msf_repo.get_all_paths()
@@ -71,11 +79,25 @@ class DefaultMSFModuleService(MSFModuleService):
         software_pattern: Optional[str] = None,
         platform: Optional[str] = None,
         rank: Optional[str] = None,
-    ) -> List[MetasploitModuleDetails]:
+    ) -> List[
+        Tuple[
+            MSFModule,
+            Optional[Software],
+            Optional[SoftwareGuideline],
+            Optional[OSGuideline],
+        ]
+    ]:
         joined_records = self.msf_repo.search_modules(
             software_pattern=software_pattern, platform=platform, rank=rank
         )
         results = []
-        for m_rec, s_rec, g_rec in joined_records:
-            results.append(MetasploitModuleDetails.from_record(m_rec, s_rec))
+        for m_rec, s_rec, sg_rec, osg_rec in joined_records:
+            results.append(
+                (
+                    MSFModule.from_record(m_rec),
+                    Software.from_record(s_rec) if s_rec else None,
+                    SoftwareGuideline.from_record(sg_rec) if sg_rec else None,
+                    OSGuideline.from_record(osg_rec) if osg_rec else None,
+                )
+            )
         return results

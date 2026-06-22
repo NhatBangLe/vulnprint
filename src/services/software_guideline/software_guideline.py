@@ -21,25 +21,26 @@ class DefaultSoftwareGuidelineService(SoftwareGuidelineService):
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def store_software_guideline(
-        self, software_guideline: SoftwareGuideline, path: str
-    ) -> int:
+        self, software_guideline: SoftwareGuideline
+    ) -> Optional[int]:
         record = SoftwareGuidelineRecord(
             id=software_guideline.id,
+            path=software_guideline.path,
             guideline=software_guideline.guideline,
             os_guideline_id=software_guideline.os_guideline_id,
             software_id=software_guideline.software_id,
             status=software_guideline.status.value,
         )
-        return self.sw_guide_repo.store_software_guideline(record, path)
+        return self.sw_guide_repo.save(record)
 
     def get_software_guideline(self, guideline_id: int) -> Optional[SoftwareGuideline]:
-        record = self.sw_guide_repo.get_software_guideline(guideline_id)
+        record = self.sw_guide_repo.get_by_id(guideline_id)
         if record and record.status != GuidelineStatus.REJECTED.value:
             return SoftwareGuideline.from_record(record)
         return None
 
     def get_software_guidelines_by_path(self, msf_path: str) -> List[SoftwareGuideline]:
-        records = self.sw_guide_repo.get_software_guidelines_by_path(msf_path)
+        records = self.sw_guide_repo.get_by_path(msf_path)
         results = []
         for record in records:
             if record.status != GuidelineStatus.REJECTED.value:
@@ -51,9 +52,26 @@ class DefaultSoftwareGuidelineService(SoftwareGuidelineService):
         return [SoftwareGuideline.from_record(r) for r in records]
 
     def update_guideline_status(
-        self, msf_path: str, status: str, guideline_text: Optional[str] = None
+        self,
+        msf_path: str,
+        status: GuidelineStatus,
+        guideline_text: Optional[str] = None,
     ) -> None:
-        self.sw_guide_repo.update_guideline_status(msf_path, status, guideline_text)
+        guideline_id = self.sw_guide_repo.exists_by_path(msf_path)
+        if not guideline_id:
+            raise Exception(f"Could not find software guideline linked to: {msf_path}")
+
+        record = self.sw_guide_repo.get_by_id(guideline_id)
+        if not record:
+            raise Exception(
+                f"Software guideline with ID {guideline_id} not found/retrievable."
+            )
+
+        record.status = status.value
+        if guideline_text is not None:
+            record.guideline = guideline_text
+
+        self.sw_guide_repo.save(record)
 
     def link_guideline_to_module(self, msf_path: str, guideline_id: int) -> None:
         self.sw_guide_repo.link_guideline_to_module(msf_path, guideline_id)

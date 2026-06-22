@@ -1,32 +1,32 @@
 from abc import ABC, abstractmethod
 from typing import List, Tuple, Optional
-from models import VulnerabilityTarget
+from models import Software
 
 
-class VulnerabilityTargetService(ABC):
-    """
-    Interface for vulnerability targets and generic software metadata service.
-    Deals exclusively with the VulnerabilityTarget domain model.
-    """
-
+class SoftwareService(ABC):
     @abstractmethod
-    def store_vulnerability_target(
-        self, path: str, target: VulnerabilityTarget
-    ) -> None:
+    def store_software(self, target: Software) -> None:
         """
         Converts domain model to records and stores them in the database layer.
         """
         pass
 
     @abstractmethod
-    def get_vulnerability_target(self, path: str) -> Optional[VulnerabilityTarget]:
+    def get_software_by_id(self, software_id: int) -> Optional[Software]:
         """
         Retrieves database DTOs and converts/returns a domain model.
         """
         pass
 
     @abstractmethod
-    def get_top_technologies(self, limit: int = 10) -> List[Tuple[str, int]]:
+    def get_software_by_path(self, path: str) -> Optional[Software]:
+        """
+        Retrieves database DTOs and converts/returns a domain model.
+        """
+        pass
+
+    @abstractmethod
+    def get_top_software(self, limit: int = 10) -> List[Tuple[str, int]]:
         """
         Retrieves top technologies target sorted by exploit count.
         """

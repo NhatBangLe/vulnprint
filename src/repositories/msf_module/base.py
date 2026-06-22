@@ -14,14 +14,35 @@ class MSFModuleRepository(ABC):
     """
 
     @abstractmethod
-    def store_module_metadata(self, record: MSFModuleRecord) -> None:
+    def save(self, record: MSFModuleRecord) -> Optional[int]:
         """
         Stores or updates module metadata in the database.
         """
         pass
 
     @abstractmethod
-    def get_module_metadata(self, msf_path: str) -> Optional[MSFModuleRecord]:
+    def exists_by_id(self, module_id: int) -> bool:
+        """
+        Checks if a module with the given id exists.
+        """
+        pass
+
+    @abstractmethod
+    def exists_by_path(self, msf_path: str) -> Optional[int]:
+        """
+        Checks if a module with the given path exists.
+        """
+        pass
+
+    @abstractmethod
+    def get_by_id(self, module_id: int) -> Optional[MSFModuleRecord]:
+        """
+        Retrieves module metadata for the given module id.
+        """
+        pass
+
+    @abstractmethod
+    def get_by_path(self, msf_path: str) -> Optional[MSFModuleRecord]:
         """
         Retrieves module metadata for the given module path.
         """

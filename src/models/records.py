@@ -5,12 +5,11 @@ from pydantic import BaseModel, Field
 class MSFModuleRecord(BaseModel):
     id: Optional[int] = None
     path: str
-    name: str
     display_name: str = ""
     type: str = ""
     rank: str = ""
     disclosure_date: str = ""
-    platform: List[str] = Field(default_factory=list)
+    platforms: List[str] = Field(default_factory=list)
     documentation: str = ""
     description: str = ""
 
