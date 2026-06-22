@@ -48,7 +48,7 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
                 ),
             )
             module_id = cursor.lastrowid
-            for plat in record.platform:
+            for plat in record.platforms:
                 cursor.execute(
                     """
                     INSERT OR IGNORE INTO module_platforms (module_path, platform)
