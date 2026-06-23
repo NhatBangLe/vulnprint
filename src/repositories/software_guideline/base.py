@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import List, Optional
-from models import SoftwareGuidelineRecord, VMGuidelineMetadata
+from models import SoftwareGuidelineRecord, SoftwareGuidelineMetadata
 
 
 class SoftwareGuidelineRepository(ABC):
@@ -58,7 +58,16 @@ class SoftwareGuidelineRepository(ABC):
         pass
 
     @abstractmethod
-    def get_guidelines_with_software_metadata(self) -> List[VMGuidelineMetadata]:
+    def get_by_os_guideline_id(
+        self, os_guideline_id: int
+    ) -> List[SoftwareGuidelineRecord]:
+        """
+        Retrieves all software guidelines associated with the given OS guideline ID.
+        """
+        pass
+
+    @abstractmethod
+    def get_guidelines_with_software_metadata(self) -> List[SoftwareGuidelineMetadata]:
         """
         Retrieves all software guidelines and their associated module/software/OS metadata mapping.
         """

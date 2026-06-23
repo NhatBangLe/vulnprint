@@ -33,7 +33,7 @@ from agents import (
     SoftwareGuidelineGeneratorAgent,
 )
 from config import settings
-from utils import configure_logging
+from utils import configure_logging, safe_print
 
 
 def parse_args() -> CLIArguments:
@@ -104,6 +104,11 @@ examples:
         type=str,
         help="Retrieve and output a VM installation guideline by Metasploit path or unique VM ID",
     )
+    group.add_argument(
+        "--export-guideline-by-os",
+        type=str,
+        help="Retrieve and output a consolidated VM installation guideline for an OS guideline ID, listing all associated software guidelines",
+    )
 
     # Optional filters and options
     parser.add_argument(
@@ -140,6 +145,7 @@ examples:
         limit=args.limit,
         review=args.review,
         export_guide=args.export_guide,
+        export_guideline_by_os=args.export_guideline_by_os,
     )
 
 
@@ -338,7 +344,76 @@ def handle_export_guide_mode(
             logger.error(f"Error exporting VM guideline to {export_file_path}: {e}")
     else:
         print("\n--------------------------------------------------")
-        print(output_text)
+        safe_print(output_text)
+        print("--------------------------------------------------")
+
+
+def handle_export_guideline_by_os_mode(
+    os_guide_service: OSGuidelineService,
+    sw_guide_service: SoftwareGuidelineService,
+    soft_service: SoftwareService,
+    export_guideline_by_os_id: str,
+    export_file_path: Optional[str],
+    logger: logging.Logger,
+) -> None:
+    if not export_guideline_by_os_id.isdigit():
+        logger.error("OS Guideline ID must be an integer.")
+        return
+
+    os_id = int(export_guideline_by_os_id)
+    os_guide = os_guide_service.get_os_guideline_by_id(os_id)
+    if not os_guide:
+        logger.error(f"No OS Guideline found for ID: {os_id}")
+        return
+
+    # Fetch all software guidelines using this OS Guideline ID
+    sw_guidelines = sw_guide_service.get_software_guidelines_by_os_id(os_id)
+
+    os_name = os_guide.os_name
+    os_text = os_guide.guideline
+
+    output_parts = [
+        f"# VM Installation Guideline (Consolidated for OS ID: {os_id})\n\n",
+        f"## 🖥️ Operating System Setup ({os_name})\n\n",
+        f"{os_text}\n\n",
+        f"## 💿 Software Installation\n\n",
+    ]
+
+    if not sw_guidelines:
+        output_parts.append(
+            "No software installations are associated with this OS Guideline yet.\n"
+        )
+    else:
+        for idx, sw_guide in enumerate(sw_guidelines, 1):
+            software = soft_service.get_software_by_id(sw_guide.software_id)
+            software_name = software.name if software else "Unknown Software"
+            output_parts.append(
+                f"### {idx}. Software: {software_name} (Path: {sw_guide.path})\n"
+                f"Software Guideline ID: {sw_guide.id}\n"
+                f"Verification Status: {sw_guide.status.value}\n\n"
+                f"{sw_guide.guideline}\n\n"
+                f"---\n\n"
+            )
+
+    output_text = "".join(output_parts).rstrip("\n-") + "\n"
+
+    if export_file_path:
+        try:
+            export_dir = os.path.dirname(export_file_path)
+            if export_dir and not os.path.exists(export_dir):
+                os.makedirs(export_dir, exist_ok=True)
+            with open(export_file_path, "w", encoding="utf-8") as ef:
+                ef.write(output_text)
+            logger.info(
+                f"Successfully exported consolidated guideline to: {export_file_path}"
+            )
+        except Exception as e:
+            logger.error(
+                f"Error exporting consolidated guideline to {export_file_path}: {e}"
+            )
+    else:
+        print("\n--------------------------------------------------")
+        safe_print(output_text)
         print("--------------------------------------------------")
 
 
@@ -347,11 +422,13 @@ def handle_analytics_mode(
     msf_service: MSFModuleService,
     soft_service: SoftwareService,
     sw_guide_service: SoftwareGuidelineService,
+    os_guide_service: OSGuidelineService,
 ) -> None:
     analytics_service = CLIAnalyticsService(
         msf_service=msf_service,
         soft_service=soft_service,
         sw_guide_service=sw_guide_service,
+        os_guide_service=os_guide_service,
     )
     if args.summary:
         analytics_service.display_dashboard()
@@ -573,6 +650,7 @@ def main():
         or args.search_db
         or args.review
         or args.export_guide
+        or args.export_guideline_by_os
     ):
         if args.review:
             handle_review_mode(
@@ -586,8 +664,19 @@ def main():
                 export_file_path=args.export,
                 logger=logger,
             )
+        elif args.export_guideline_by_os:
+            handle_export_guideline_by_os_mode(
+                os_guide_service=os_guide_service,
+                sw_guide_service=sw_guide_service,
+                soft_service=soft_service,
+                export_guideline_by_os_id=args.export_guideline_by_os,
+                export_file_path=args.export,
+                logger=logger,
+            )
         else:
-            handle_analytics_mode(args, msf_service, soft_service, sw_guide_service)
+            handle_analytics_mode(
+                args, msf_service, soft_service, sw_guide_service, os_guide_service
+            )
     elif args.search:
         handle_search_ingestion(
             args=args,

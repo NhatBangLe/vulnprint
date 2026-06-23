@@ -1,7 +1,14 @@
 from typing import List, Optional, Tuple
 from repositories import OSGuidelineRepository, TargetSystemRepository
 from .base import OSGuidelineService
-from models import OSGuideline, OSGuidelineRecord, TargetSystemRecord, GuidelineStatus
+from models import (
+    OSGuideline,
+    OSGuidelineRecord,
+    TargetSystemRecord,
+    GuidelineStatus,
+    OSGuidelineCoverageStats,
+    OSGuidelineCoverageItem,
+)
 
 
 class DefaultOSGuidelineService(OSGuidelineService):
@@ -103,3 +110,31 @@ class DefaultOSGuidelineService(OSGuidelineService):
                 candidates.append((score, OSGuideline.from_record(record)))
 
         return candidates
+
+    def get_os_guideline_coverage_stats(self) -> OSGuidelineCoverageStats:
+        records = self.os_guide_repo.get_os_guideline_coverage_stats()
+        total_guidelines = len(records)
+        total_sw_count = 0
+        items = []
+
+        for record, count in records:
+            total_sw_count += count
+            os_guide = OSGuideline.from_record(record)
+            items.append(
+                OSGuidelineCoverageItem(
+                    guideline_id=os_guide.id,
+                    os_name=os_guide.os_name,
+                    status=os_guide.status.value,
+                    coverage_count=count,
+                )
+            )
+
+        average_coverage = (
+            (total_sw_count / total_guidelines) if total_guidelines > 0 else 0.0
+        )
+
+        return OSGuidelineCoverageStats(
+            total_os_guidelines=total_guidelines,
+            average_coverage=round(average_coverage, 2),
+            guidelines=items,
+        )

@@ -261,7 +261,7 @@ class SoftwareGuideline(BaseModel):
         )
 
 
-class VMGuidelineMetadata(BaseModel):
+class SoftwareGuidelineMetadata(BaseModel):
     guideline_id: int
     guideline_text: str
     status: str
@@ -272,7 +272,7 @@ class VMGuidelineMetadata(BaseModel):
     module_paths: List[str] = Field(default_factory=list)
 
 
-class GuidelineCoverageItem(BaseModel):
+class SoftwareGuidelineCoverageItem(BaseModel):
     guideline_id: int
     software_name: str
     status: str
@@ -280,7 +280,20 @@ class GuidelineCoverageItem(BaseModel):
     coverage_count: int
 
 
-class VMGuidelineCoverageStats(BaseModel):
+class SoftwareGuidelineCoverageStats(BaseModel):
     total_guidelines: int
     average_coverage: float
-    guidelines: List[GuidelineCoverageItem] = Field(default_factory=list)
+    guidelines: List[SoftwareGuidelineCoverageItem] = Field(default_factory=list)
+
+
+class OSGuidelineCoverageItem(BaseModel):
+    guideline_id: int
+    os_name: str
+    status: str
+    coverage_count: int
+
+
+class OSGuidelineCoverageStats(BaseModel):
+    total_os_guidelines: int
+    average_coverage: float
+    guidelines: List[OSGuidelineCoverageItem] = Field(default_factory=list)

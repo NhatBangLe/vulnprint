@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import List, Optional, Tuple
-from models import OSGuideline
+from models import OSGuideline, OSGuidelineCoverageStats
 
 
 class OSGuidelineService(ABC):
@@ -28,5 +28,12 @@ class OSGuidelineService(ABC):
     ) -> List[Tuple[int, OSGuideline]]:
         """
         Finds all potential OS guidelines in the database matching the criteria.
+        """
+        pass
+
+    @abstractmethod
+    def get_os_guideline_coverage_stats(self) -> OSGuidelineCoverageStats:
+        """
+        Retrieves OS guidelines along with the count of software guidelines using them.
         """
         pass

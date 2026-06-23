@@ -6,8 +6,8 @@ from models import (
     SoftwareGuideline,
     SoftwareGuidelineRecord,
     GuidelineStatus,
-    GuidelineCoverageItem,
-    VMGuidelineCoverageStats,
+    SoftwareGuidelineCoverageItem,
+    SoftwareGuidelineCoverageStats,
 )
 
 
@@ -76,7 +76,15 @@ class DefaultSoftwareGuidelineService(SoftwareGuidelineService):
     def link_guideline_to_module(self, msf_path: str, guideline_id: int) -> None:
         self.sw_guide_repo.link_guideline_to_module(msf_path, guideline_id)
 
-    def get_guideline_coverage_stats(self) -> VMGuidelineCoverageStats:
+    def get_software_guidelines_by_os_id(self, os_guideline_id: int) -> List[SoftwareGuideline]:
+        records = self.sw_guide_repo.get_by_os_guideline_id(os_guideline_id)
+        results = []
+        for record in records:
+            if record.status != GuidelineStatus.REJECTED.value:
+                results.append(SoftwareGuideline.from_record(record))
+        return results
+
+    def get_guideline_coverage_stats(self) -> SoftwareGuidelineCoverageStats:
         metadata_list = self.sw_guide_repo.get_guidelines_with_software_metadata()
 
         total_guidelines = len(metadata_list)
@@ -87,7 +95,7 @@ class DefaultSoftwareGuidelineService(SoftwareGuidelineService):
             coverage_count = len(meta.module_paths)
             total_coverage_count += coverage_count
             items.append(
-                GuidelineCoverageItem(
+                SoftwareGuidelineCoverageItem(
                     guideline_id=meta.guideline_id,
                     software_name=meta.associated_software_name or "Unknown Software",
                     status=meta.status,
@@ -103,7 +111,7 @@ class DefaultSoftwareGuidelineService(SoftwareGuidelineService):
             (total_coverage_count / total_guidelines) if total_guidelines > 0 else 0.0
         )
 
-        return VMGuidelineCoverageStats(
+        return SoftwareGuidelineCoverageStats(
             total_guidelines=total_guidelines,
             average_coverage=round(average_coverage, 2),
             guidelines=items,

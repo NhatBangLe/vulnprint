@@ -1,7 +1,7 @@
 import logging
 from typing import List, Optional
 from .base import SoftwareGuidelineRepository
-from models import SoftwareGuidelineRecord, VMGuidelineMetadata
+from models import SoftwareGuidelineRecord, SoftwareGuidelineMetadata
 from database import DatabaseManager, SQLiteDatabaseManager
 
 
@@ -229,7 +229,7 @@ class SQLiteSoftwareGuidelineRepository(SoftwareGuidelineRepository):
             if conn:
                 conn.close()
 
-    def get_guidelines_with_software_metadata(self) -> List[VMGuidelineMetadata]:
+    def get_guidelines_with_software_metadata(self) -> List[SoftwareGuidelineMetadata]:
         conn = None
         try:
             conn = self.db_manager.get_connection()
@@ -304,7 +304,7 @@ class SQLiteSoftwareGuidelineRepository(SoftwareGuidelineRepository):
             result = []
             for g_id, data in guidelines_dict.items():
                 result.append(
-                    VMGuidelineMetadata(
+                    SoftwareGuidelineMetadata(
                         guideline_id=data["guideline_id"],
                         guideline_text=data["guideline_text"],
                         status=data["status"],
@@ -320,6 +320,48 @@ class SQLiteSoftwareGuidelineRepository(SoftwareGuidelineRepository):
         except Exception as e:
             self._logger.error(
                 f"Error retrieving guidelines with software metadata: {e}"
+            )
+            return []
+        finally:
+            if conn:
+                conn.close()
+
+    def get_by_os_guideline_id(
+        self, os_guideline_id: int
+    ) -> List[SoftwareGuidelineRecord]:
+        conn = None
+        try:
+            conn = self.db_manager.get_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT sg.id, sg.guideline, sg.os_guideline_id, sg.software_id, sg.status, mg.module_path, sg.created_at, sg.updated_at
+                FROM software_guidelines sg
+                LEFT JOIN module_guidelines mg ON sg.id = mg.guideline_id
+                WHERE sg.os_guideline_id = ?
+                ORDER BY sg.created_at DESC;
+                """,
+                (os_guideline_id,),
+            )
+            rows = cursor.fetchall()
+            results = []
+            for row in rows:
+                results.append(
+                    SoftwareGuidelineRecord(
+                        id=row[0],
+                        guideline=row[1],
+                        os_guideline_id=row[2],
+                        software_id=row[3],
+                        status=row[4] or "UNVERIFIED",
+                        path=row[5] or "",
+                        created_at=row[6],
+                        updated_at=row[7],
+                    )
+                )
+            return results
+        except Exception as e:
+            self._logger.error(
+                f"Error retrieving software guidelines for OS guideline ID {os_guideline_id}: {e}"
             )
             return []
         finally:

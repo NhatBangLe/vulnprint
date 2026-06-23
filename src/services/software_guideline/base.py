@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import List, Optional
-from models import SoftwareGuideline, VMGuidelineCoverageStats, GuidelineStatus
+from models import SoftwareGuideline, SoftwareGuidelineCoverageStats, GuidelineStatus
 
 
 class SoftwareGuidelineService(ABC):
@@ -58,7 +58,14 @@ class SoftwareGuidelineService(ABC):
         pass
 
     @abstractmethod
-    def get_guideline_coverage_stats(self) -> VMGuidelineCoverageStats:
+    def get_software_guidelines_by_os_id(self, os_guideline_id: int) -> List[SoftwareGuideline]:
+        """
+        Retrieves software guidelines associated with the given OS guideline ID.
+        """
+        pass
+
+    @abstractmethod
+    def get_guideline_coverage_stats(self) -> SoftwareGuidelineCoverageStats:
         """
         Compiles guideline coverage metrics.
         """

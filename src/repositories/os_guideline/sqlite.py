@@ -193,3 +193,45 @@ class SQLiteOSGuidelineRepository(OSGuidelineRepository):
         finally:
             if conn:
                 conn.close()
+
+    def get_os_guideline_coverage_stats(self) -> list[tuple[OSGuidelineRecord, int]]:
+        conn = None
+        try:
+            conn = self.db_manager.get_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT og.id, og.guideline, og.target_system_id, og.status,
+                       ts.platform, ts.distribution, ts.version, ts.architecture,
+                       og.created_at, og.updated_at, COUNT(sg.id) AS sw_count
+                FROM os_guidelines og
+                JOIN target_systems ts ON og.target_system_id = ts.id
+                LEFT JOIN software_guidelines sg ON og.id = sg.os_guideline_id
+                GROUP BY og.id
+                ORDER BY sw_count DESC, ts.platform ASC;
+                """
+            )
+            rows = cursor.fetchall()
+            results = []
+            for row in rows:
+                record = OSGuidelineRecord(
+                    id=row[0],
+                    guideline=row[1],
+                    target_system_id=row[2],
+                    status=row[3] or "UNVERIFIED",
+                    platform=row[4] or "",
+                    distribution=row[5] or "",
+                    version=row[6] or "",
+                    architecture=row[7] or "",
+                    created_at=row[8],
+                    updated_at=row[9],
+                )
+                count = row[10]
+                results.append((record, count))
+            return results
+        except Exception as e:
+            self._logger.error(f"Error retrieving OS guideline coverage stats: {e}")
+            return []
+        finally:
+            if conn:
+                conn.close()

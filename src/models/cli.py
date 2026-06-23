@@ -13,3 +13,4 @@ class CLIArguments(BaseModel):
     limit: Optional[int] = None
     review: bool = False
     export_guide: Optional[str] = None
+    export_guideline_by_os: Optional[str] = None

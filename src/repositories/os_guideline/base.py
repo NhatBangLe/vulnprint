@@ -42,3 +42,11 @@ class OSGuidelineRepository(ABC):
         Retrieves all OS guidelines.
         """
         pass
+
+    @abstractmethod
+    def get_os_guideline_coverage_stats(self) -> list[tuple[OSGuidelineRecord, int]]:
+        """
+        Retrieves OS guidelines along with the count of software guidelines using them.
+        Ordered by the count in descending order.
+        """
+        pass

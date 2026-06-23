@@ -5,6 +5,7 @@ from services import (
     MSFModuleService,
     SoftwareService,
     SoftwareGuidelineService,
+    OSGuidelineService,
 )
 from utils import OutputBuffer
 
@@ -19,10 +20,12 @@ class CLIAnalyticsService(AnalyticsService):
         msf_service: MSFModuleService,
         soft_service: SoftwareService,
         sw_guide_service: SoftwareGuidelineService,
+        os_guide_service: OSGuidelineService,
     ):
         self.msf_service = msf_service
         self.soft_service = soft_service
         self.sw_guide_service = sw_guide_service
+        self.os_guide_service = os_guide_service
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def _generate_bar(self, percentage: float, max_bar_length: int = 25) -> str:
@@ -66,6 +69,45 @@ class CLIAnalyticsService(AnalyticsService):
                 print(f"{idx:<6}{display_name:<36}{count:<10}{percentage_str:<10}")
 
             print("=" * 70 + "\n")
+
+            # Query OS guideline coverage summary
+            os_stats = self.os_guide_service.get_os_guideline_coverage_stats()
+            total_os_sw_guides = sum(
+                item.coverage_count for item in os_stats.guidelines
+            )
+
+            print("=" * 70)
+            print(f"{'OS GUIDELINE COVERAGE SUMMARY':^70}")
+            print("=" * 70)
+            print(f" Total Software Guidelines Covered: {total_os_sw_guides}")
+            print("-" * 70)
+
+            if total_os_sw_guides == 0:
+                print(
+                    " No software guidelines linked to OS guidelines found in the database."
+                )
+                print("=" * 70 + "\n")
+            else:
+                print(
+                    f"{'Rank':<6}{'OS Guideline Setup':<36}{'SW Covered':<12}{'Percentage':<10}"
+                )
+                print("-" * 70)
+                for idx, item in enumerate(os_stats.guidelines, 1):
+                    percentage = (
+                        (item.coverage_count / total_os_sw_guides) * 100
+                        if total_os_sw_guides > 0
+                        else 0
+                    )
+                    percentage_str = f"{percentage:.1f}%"
+                    display_name = (
+                        item.os_name[:34] + ".."
+                        if len(item.os_name) > 34
+                        else item.os_name
+                    )
+                    print(
+                        f"{idx:<6}{display_name:<36}{item.coverage_count:<12}{percentage_str:<10}"
+                    )
+                print("=" * 70 + "\n")
 
         except Exception as e:
             self._logger.error(f"Error displaying analytics: {e}")
@@ -153,17 +195,19 @@ class CLIAnalyticsService(AnalyticsService):
                     buf.write(f" {idx}. {display_config:<51}{count:<10}")
                 buf.write("=" * 70)
 
-            # Panel 5: VM Guideline Coverage & Consolidation
+            # Panel 5: Software Guideline Coverage & Consolidation
             stats = self.sw_guide_service.get_guideline_coverage_stats()
             buf.write("\n" + "=" * 70)
-            buf.write(f"{'VM GUIDELINE COVERAGE & CONSOLIDATION':^70}")
+            buf.write(f"{'SOFTWARE GUIDELINE COVERAGE & CONSOLIDATION':^70}")
             buf.write("=" * 70)
-            buf.write(f" Total Unique VM Guidelines: {stats.total_guidelines}")
-            buf.write(f" Average Module Coverage per VM: {stats.average_coverage:.2f}")
+            buf.write(f" Total Unique Software Guidelines: {stats.total_guidelines}")
+            buf.write(
+                f" Average Module Coverage per Software Guideline: {stats.average_coverage:.2f}"
+            )
             buf.write("-" * 70)
             if stats.total_guidelines > 0:
                 buf.write(
-                    f" {'VM ID':<8}{'Target Software Product':<36}{'Status':<14}{'MSF Covered'}"
+                    f" {'Guide ID':<10}{'Target Software Product':<36}{'Status':<14}{'MSF Covered'}"
                 )
                 buf.write("-" * 70)
                 for item in stats.guidelines:
@@ -173,10 +217,46 @@ class CLIAnalyticsService(AnalyticsService):
                         else item.software_name
                     )
                     buf.write(
-                        f" {item.guideline_id:<8}"
+                        f" {item.guideline_id:<10}"
                         f"{display_software:<36}"
                         f"{item.status:<14}"
                         f"{item.coverage_count}"
+                    )
+                buf.write("=" * 70)
+
+            # Panel 6: OS Guideline Coverage Distribution
+            os_stats = self.os_guide_service.get_os_guideline_coverage_stats()
+            total_os_sw_guides = sum(
+                item.coverage_count for item in os_stats.guidelines
+            )
+            buf.write("\n" + "=" * 70)
+            buf.write(f"{'OS GUIDELINE COVERAGE DISTRIBUTION':^70}")
+            buf.write("=" * 70)
+            buf.write(f" Total Unique OS Guidelines: {os_stats.total_os_guidelines}")
+            buf.write(
+                f" Average Software Coverage per OS Guideline: {os_stats.average_coverage:.2f}"
+            )
+            buf.write("-" * 70)
+            if os_stats.total_os_guidelines > 0:
+                buf.write(
+                    f" {'Rank':<6}{'OS Guideline Setup':<30}{'SW Covered':<12}{'Percentage':<12}{'Bar Chart'}"
+                )
+                buf.write("-" * 70)
+                for idx, item in enumerate(os_stats.guidelines, 1):
+                    pct = (
+                        (item.coverage_count / total_os_sw_guides * 100)
+                        if total_os_sw_guides > 0
+                        else 0
+                    )
+                    pct_str = f"{pct:.1f}%"
+                    bar = self._generate_bar(pct)
+                    display_name = (
+                        item.os_name[:28] + ".."
+                        if len(item.os_name) > 28
+                        else item.os_name
+                    )
+                    buf.write(
+                        f" {idx:<5}{display_name:<30}{item.coverage_count:<12}{pct_str:<12}{bar}"
                     )
                 buf.write("=" * 70)
 
