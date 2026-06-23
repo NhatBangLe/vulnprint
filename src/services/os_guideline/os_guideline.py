@@ -73,38 +73,74 @@ class DefaultOSGuidelineService(OSGuidelineService):
                     continue
                 score += 30
 
+                # Check distribution
                 t_dist = target_system.distribution.lower().strip()
                 r_dist = record.distribution.lower().strip()
                 if t_dist:
                     if t_dist == r_dist:
                         score += 30
+                    else:
+                        continue  # Strict mismatch: different distribution specified
                 else:
-                    score += 15
+                    if not r_dist:
+                        score += 30  # Perfect match: both generic
+                    else:
+                        score += 15  # Specific guideline for generic target
 
+                # Check version
                 t_ver = target_system.version.lower().strip()
                 r_ver = record.version.lower().strip()
                 if t_ver:
                     if t_ver == r_ver:
                         score += 20
+                    else:
+                        continue  # Strict mismatch: different version specified
                 else:
-                    score += 10
+                    if not r_ver:
+                        score += 20  # Perfect match: both generic
+                    else:
+                        score += 10  # Specific guideline for generic target
 
+                # Check architecture
                 t_arch = target_system.architecture.lower().strip()
                 r_arch = record.architecture.lower().strip()
                 if t_arch:
                     if t_arch == r_arch:
                         score += 20
+                    else:
+                        continue  # Strict mismatch: different architecture specified
                 else:
-                    score += 10
+                    if not r_arch:
+                        score += 20  # Perfect match: both generic
+                    else:
+                        score += 10  # Specific guideline for generic target
             else:
                 if not platforms:
                     continue
                 req_plats = [p.lower().strip() for p in platforms]
                 if record.platform.lower().strip() in req_plats:
                     score += 30
-                    score += 15
-                    score += 10
-                    score += 10
+
+                    # Distribution points for generic query
+                    r_dist = record.distribution.lower().strip()
+                    if not r_dist:
+                        score += 30
+                    else:
+                        score += 15
+
+                    # Version points for generic query
+                    r_ver = record.version.lower().strip()
+                    if not r_ver:
+                        score += 20
+                    else:
+                        score += 10
+
+                    # Architecture points for generic query
+                    r_arch = record.architecture.lower().strip()
+                    if not r_arch:
+                        score += 20
+                    else:
+                        score += 10
 
             if score > 0:
                 candidates.append((score, OSGuideline.from_record(record)))
