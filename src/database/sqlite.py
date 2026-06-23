@@ -23,7 +23,7 @@ class SQLiteDatabaseManager(DatabaseManager):
             # Enable foreign keys
             cursor.execute("PRAGMA foreign_keys = ON;")
 
-            # 1. msf_modules table
+            # msf_modules table
             cursor.execute(
                 """
             CREATE TABLE IF NOT EXISTS msf_modules (
@@ -40,7 +40,7 @@ class SQLiteDatabaseManager(DatabaseManager):
             """
             )
 
-            # 2. module_platforms table
+            # module_platforms table
             cursor.execute(
                 """
             CREATE TABLE IF NOT EXISTS module_platforms (
@@ -52,7 +52,21 @@ class SQLiteDatabaseManager(DatabaseManager):
             """
             )
 
-            # 2. software table
+            # target_systems table
+            cursor.execute(
+                """
+            CREATE TABLE IF NOT EXISTS target_systems (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                platform TEXT NOT NULL,
+                distribution TEXT DEFAULT '',
+                version TEXT DEFAULT '',
+                architecture TEXT DEFAULT '',
+                UNIQUE (platform, distribution, version, architecture)
+            );
+            """
+            )
+
+            # software table
             cursor.execute(
                 """
             CREATE TABLE IF NOT EXISTS software (
@@ -62,28 +76,30 @@ class SQLiteDatabaseManager(DatabaseManager):
                 cves TEXT,
                 vulnerable_versions TEXT,
                 required_configs TEXT,
+                target_system_id INTEGER,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (path) REFERENCES msf_modules(path) ON DELETE CASCADE
+                FOREIGN KEY (path) REFERENCES msf_modules(path) ON DELETE CASCADE,
+                FOREIGN KEY (target_system_id) REFERENCES target_systems(id) ON DELETE SET NULL
             );
             """
             )
 
-            # 3. os_guidelines table
+            # os_guidelines table
             cursor.execute(
                 """
             CREATE TABLE IF NOT EXISTS os_guidelines (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                os_name TEXT UNIQUE NOT NULL,
                 guideline TEXT NOT NULL,
-                platform TEXT,
+                target_system_id INTEGER UNIQUE NOT NULL,
                 status TEXT DEFAULT 'UNVERIFIED',
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (target_system_id) REFERENCES target_systems(id) ON DELETE RESTRICT
             );
             """
             )
 
-            # 4. software_guidelines table
+            # software_guidelines table
             cursor.execute(
                 """
             CREATE TABLE IF NOT EXISTS software_guidelines (
@@ -100,7 +116,7 @@ class SQLiteDatabaseManager(DatabaseManager):
             """
             )
 
-            # 5. module_guidelines table
+            # module_guidelines table
             cursor.execute(
                 """
             CREATE TABLE IF NOT EXISTS module_guidelines (

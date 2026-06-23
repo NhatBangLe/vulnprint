@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import List, Optional, Tuple
+from typing import List, Optional
 from models import SoftwareGuideline, VMGuidelineCoverageStats, GuidelineStatus
 
 
@@ -54,15 +54,6 @@ class SoftwareGuidelineService(ABC):
     def link_guideline_to_module(self, msf_path: str, guideline_id: int) -> None:
         """
         Links an existing software guideline to an MSF module path.
-        """
-        pass
-
-    @abstractmethod
-    def find_all_potential_guidelines(
-        self, platform: List[str], software_name: str, vulnerable_versions: List[str]
-    ) -> List[Tuple[int, SoftwareGuideline]]:
-        """
-        Finds all potential software guidelines in the database matching the criteria.
         """
         pass
 

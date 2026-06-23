@@ -22,6 +22,18 @@ class VulnerabilityTarget(BaseModel):
         default_factory=list,
         description="Explicit application environment flags, e.g., ['AJP connector enabled']",
     )
+    os_distribution_or_edition: Optional[str] = Field(
+        default="",
+        description="The target OS distribution/edition extracted from the exploit details, e.g., 'ubuntu', 'debian', '10', '11', 'server 2019'. Leave empty if not mentioned or generic.",
+    )
+    os_version_or_release: Optional[str] = Field(
+        default="",
+        description="The target OS version/release/service pack, e.g., '20.04 lts', '22.04', 'sp1', '22h2', '1909'. Leave empty if not mentioned or generic.",
+    )
+    os_architecture: Optional[str] = Field(
+        default="",
+        description="The target OS CPU architecture, strictly formatted as '32-bit' or '64-bit'. Leave empty if not mentioned or generic.",
+    )
 
 
 class VulnerabilityTargetExtractorAgent:
@@ -55,7 +67,8 @@ class VulnerabilityTargetExtractorAgent:
             system_prompt=(
                 "You are an expert open-source cyber threat intelligence extractor. "
                 "Analyze the given exploit text block. Extract the primary software package target name, "
-                "its explicit vulnerable version identifiers, and specific environment rules. "
+                "its explicit vulnerable version identifiers, specific environment rules, and target Operating System "
+                "specifications (distribution/edition, version/release name, architecture) if specified."
             ),
             response_format=VulnerabilityTarget,
         )

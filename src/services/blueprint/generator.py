@@ -12,7 +12,7 @@ from services import (
     SoftwareGuidelineService,
 )
 from models import GuidelineStatus, Software
-from agents import VMGuidelineGeneratorAgent
+from agents import OSGuidelineGeneratorAgent, SoftwareGuidelineGeneratorAgent
 
 
 class MarkdownBlueprintService(BlueprintService):
@@ -26,7 +26,8 @@ class MarkdownBlueprintService(BlueprintService):
         soft_service: SoftwareService,
         os_guide_service: OSGuidelineService,
         sw_guide_service: SoftwareGuidelineService,
-        vm_guideline_generator_agent: VMGuidelineGeneratorAgent,
+        os_guideline_generator_agent: OSGuidelineGeneratorAgent,
+        software_guideline_generator_agent: SoftwareGuidelineGeneratorAgent,
         output_dir: str = "vulnprint_blueprints/",
     ):
         self.msf_service = msf_service
@@ -34,7 +35,8 @@ class MarkdownBlueprintService(BlueprintService):
         self.output_dir = output_dir
         self.os_guide_service = os_guide_service
         self.sw_guide_service = sw_guide_service
-        self.vm_guideline_generator_agent = vm_guideline_generator_agent
+        self.os_guideline_generator_agent = os_guideline_generator_agent
+        self.software_guideline_generator_agent = software_guideline_generator_agent
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def generate_blueprint(self, msf_path: str) -> Optional[str]:
@@ -77,49 +79,31 @@ class MarkdownBlueprintService(BlueprintService):
                     data["os_name"] = os_guide.os_name
             else:
                 self._logger.info(
-                    f"Guideline for {msf_path} not directly found. Searching for suitable existing guideline..."
+                    f"Guideline for {msf_path} not directly found. Searching for suitable existing OS guideline..."
                 )
-                potential_guides = self.sw_guide_service.find_all_potential_guidelines(
-                    platform=msf_module.platforms,
-                    software_name=software.name,
-                    vulnerable_versions=software.vulnerable_versions,
+                potential_os_guides = (
+                    self.os_guide_service.find_all_potential_guidelines(
+                        target_system_id=software.target_system_id,
+                        platforms=msf_module.platforms,
+                    )
                 )
-                if potential_guides:
+                if potential_os_guides:
                     self._logger.info(
-                        f"Found {len(potential_guides)} suitable existing guideline(s) covering "
-                        f"software '{software.name}'. Linking to {msf_path}."
+                        f"Found {len(potential_os_guides)} suitable existing OS guideline(s) matching requirements."
                     )
-                    # Link to all suitable guides
-                    for _, guideline in potential_guides:
-                        self.sw_guide_service.link_guideline_to_module(
-                            msf_path, guideline.id
-                        )
-                    highest_score_guide = max(potential_guides, key=lambda x: x[0])[1]
-                    os_guide = self.os_guide_service.get_os_guideline_by_id(
-                        highest_score_guide.os_guideline_id
-                    )
+                    highest_score_os_guide = max(
+                        potential_os_guides, key=lambda x: x[0]
+                    )[1]
+                    os_guideline_id = highest_score_os_guide.id
+                    os_guide = highest_score_os_guide
 
-                    data["software_guideline"] = highest_score_guide.guideline
-                    if os_guide:
-                        data["os_guideline"] = os_guide.guideline
-                        data["os_name"] = os_guide.os_name
-                else:
-                    self._logger.warning(
-                        f"No suitable guideline found in database for {msf_path}. Regenerating using AI Agent..."
+                    self._logger.info(
+                        f"Re-using OS guideline ID {os_guideline_id} ({os_guide.os_name}). Generating software guideline..."
                     )
-                    generated = self.vm_guideline_generator_agent.generate(msf_path)
-                    if generated:
-                        os_guide, sw_guide = generated
-                        # 1. Store OS Guideline and get its ID
-                        os_guideline_id = self.os_guide_service.store_os_guideline(
-                            os_guide
-                        )
-                        if os_guideline_id is None:
-                            raise Exception(
-                                f"Failed to store OS guideline for {msf_path}"
-                            )
-
-                        # 2. Update software guideline fields and store it
+                    sw_guide = self.software_guideline_generator_agent.generate(
+                        msf_path, os_guideline_id
+                    )
+                    if sw_guide:
                         sw_guide.os_guideline_id = os_guideline_id
                         sw_guide.software_id = (
                             software.id if software and software.id else 1
@@ -131,16 +115,61 @@ class MarkdownBlueprintService(BlueprintService):
                             raise Exception(
                                 f"Failed to store software guideline for {msf_path}"
                             )
-
                         self._logger.info(
-                            f"Stored the newly generated OS and Software guidelines for {msf_path}"
+                            f"Stored software guideline with ID {sw_guide_id} for {msf_path}"
                         )
                         data["os_guideline"] = os_guide.guideline
                         data["os_name"] = os_guide.os_name
                         data["software_guideline"] = sw_guide.guideline
                     else:
                         self._logger.error(
-                            f"Failed to generate guideline for {msf_path}. Using fallback instructions."
+                            f"Failed to generate software guideline for {msf_path} using reused OS guideline ID {os_guideline_id}."
+                        )
+                else:
+                    self._logger.warning(
+                        f"No suitable OS guideline found in database for {msf_path}. Regenerating OS guideline using AI Agent..."
+                    )
+                    os_guide = self.os_guideline_generator_agent.generate(msf_path)
+                    if os_guide:
+                        # 1. Store OS Guideline and get its ID
+                        os_guideline_id = self.os_guide_service.store_os_guideline(
+                            os_guide
+                        )
+                        if os_guideline_id is None:
+                            raise Exception(
+                                f"Failed to store OS guideline for {msf_path}"
+                            )
+
+                        # 2. Generate software guideline using the new OS guideline ID
+                        sw_guide = self.software_guideline_generator_agent.generate(
+                            msf_path, os_guideline_id
+                        )
+                        if sw_guide:
+                            sw_guide.os_guideline_id = os_guideline_id
+                            sw_guide.software_id = (
+                                software.id if software and software.id else 1
+                            )
+                            sw_guide_id = (
+                                self.sw_guide_service.store_software_guideline(sw_guide)
+                            )
+                            if sw_guide_id is None:
+                                raise Exception(
+                                    f"Failed to store software guideline for {msf_path}"
+                                )
+
+                            self._logger.info(
+                                f"Stored the newly generated OS and Software guidelines for {msf_path}"
+                            )
+                            data["os_guideline"] = os_guide.guideline
+                            data["os_name"] = os_guide.os_name
+                            data["software_guideline"] = sw_guide.guideline
+                        else:
+                            self._logger.error(
+                                f"Failed to generate software guideline for {msf_path}."
+                            )
+                    else:
+                        self._logger.error(
+                            f"Failed to generate OS guideline for {msf_path}. Using fallback instructions."
                         )
 
             # Build the exact template layout required

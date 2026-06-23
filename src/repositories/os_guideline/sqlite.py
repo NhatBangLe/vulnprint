@@ -13,7 +13,7 @@ class SQLiteOSGuidelineRepository(OSGuidelineRepository):
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def save(self, record: OSGuidelineRecord) -> Optional[int]:
-        existing_guideline_id = self.exists_by_name(record.os_name)
+        existing_guideline_id = self.exists_by_target_system(record.target_system_id)
         if existing_guideline_id:
             return self._update_by_id(existing_guideline_id, record)
 
@@ -23,30 +23,22 @@ class SQLiteOSGuidelineRepository(OSGuidelineRepository):
             cursor = conn.cursor()
             cursor.execute(
                 """
-                INSERT INTO os_guidelines (os_name, guideline, platform, status, created_at, updated_at)
-                VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                INSERT INTO os_guidelines (guideline, target_system_id, status, created_at, updated_at)
+                VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 """,
                 (
-                    record.os_name.lower().strip(),
                     record.guideline,
-                    record.platform.lower().strip(),
+                    record.target_system_id,
                     record.status,
                 ),
             )
-            cursor.execute(
-                "SELECT id FROM os_guidelines WHERE os_name = ?;",
-                (record.os_name.lower().strip(),),
-            )
-            row = cursor.fetchone()
-            if not row:
-                raise ValueError(
-                    f"Failed to retrieve stored OS guideline ID for {record.os_name}"
-                )
-            guideline_id = row[0]
+            guideline_id = cursor.lastrowid
             conn.commit()
             return guideline_id
         except Exception as e:
-            self._logger.error(f"Error storing OS guideline for {record.os_name}: {e}")
+            self._logger.error(
+                f"Error storing OS guideline for target system ID {record.target_system_id}: {e}"
+            )
             return None
         finally:
             if conn:
@@ -71,20 +63,20 @@ class SQLiteOSGuidelineRepository(OSGuidelineRepository):
             if conn:
                 conn.close()
 
-    def exists_by_name(self, os_name: str) -> Optional[int]:
+    def exists_by_target_system(self, target_system_id: int) -> Optional[int]:
         conn = None
         try:
             conn = self.db_manager.get_connection()
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT id FROM os_guidelines WHERE os_name = ?;",
-                (os_name.lower().strip(),),
+                "SELECT id FROM os_guidelines WHERE target_system_id = ?;",
+                (target_system_id,),
             )
             row = cursor.fetchone()
             return row[0] if row else None
         except Exception as e:
             self._logger.error(
-                f"Error checking if OS guideline exists for name {os_name}: {e}"
+                f"Error checking if OS guideline exists for target system ID {target_system_id}: {e}"
             )
             return None
         finally:
@@ -98,8 +90,12 @@ class SQLiteOSGuidelineRepository(OSGuidelineRepository):
             cursor = conn.cursor()
             cursor.execute(
                 """
-                SELECT id, os_name, guideline, platform, status, created_at, updated_at
-                FROM os_guidelines WHERE id = ?;
+                SELECT og.id, og.guideline, og.target_system_id, og.status,
+                       ts.platform, ts.distribution, ts.version, ts.architecture,
+                       og.created_at, og.updated_at
+                FROM os_guidelines og
+                JOIN target_systems ts ON og.target_system_id = ts.id
+                WHERE og.id = ?;
                 """,
                 (guideline_id,),
             )
@@ -108,12 +104,15 @@ class SQLiteOSGuidelineRepository(OSGuidelineRepository):
                 return None
             return OSGuidelineRecord(
                 id=row[0],
-                os_name=row[1],
-                guideline=row[2],
-                platform=row[3] or "",
-                status=row[4] or "UNVERIFIED",
-                created_at=row[5],
-                updated_at=row[6],
+                guideline=row[1],
+                target_system_id=row[2],
+                status=row[3] or "UNVERIFIED",
+                platform=row[4] or "",
+                distribution=row[5] or "",
+                version=row[6] or "",
+                architecture=row[7] or "",
+                created_at=row[8],
+                updated_at=row[9],
             )
         except Exception as e:
             self._logger.error(
@@ -124,33 +123,41 @@ class SQLiteOSGuidelineRepository(OSGuidelineRepository):
             if conn:
                 conn.close()
 
-    def get_by_name(self, os_name: str) -> Optional[OSGuidelineRecord]:
+    def get_all_guidelines(self) -> list[OSGuidelineRecord]:
         conn = None
         try:
             conn = self.db_manager.get_connection()
             cursor = conn.cursor()
             cursor.execute(
                 """
-                SELECT id, os_name, guideline, platform, status, created_at, updated_at
-                FROM os_guidelines WHERE os_name = ?;
-                """,
-                (os_name.lower().strip(),),
+                SELECT og.id, og.guideline, og.target_system_id, og.status,
+                       ts.platform, ts.distribution, ts.version, ts.architecture,
+                       og.created_at, og.updated_at
+                FROM os_guidelines og
+                JOIN target_systems ts ON og.target_system_id = ts.id;
+                """
             )
-            row = cursor.fetchone()
-            if not row:
-                return None
-            return OSGuidelineRecord(
-                id=row[0],
-                os_name=row[1],
-                guideline=row[2],
-                platform=row[3] or "",
-                status=row[4] or "UNVERIFIED",
-                created_at=row[5],
-                updated_at=row[6],
-            )
+            rows = cursor.fetchall()
+            results = []
+            for row in rows:
+                results.append(
+                    OSGuidelineRecord(
+                        id=row[0],
+                        guideline=row[1],
+                        target_system_id=row[2],
+                        status=row[3] or "UNVERIFIED",
+                        platform=row[4] or "",
+                        distribution=row[5] or "",
+                        version=row[6] or "",
+                        architecture=row[7] or "",
+                        created_at=row[8],
+                        updated_at=row[9],
+                    )
+                )
+            return results
         except Exception as e:
-            self._logger.error(f"Error retrieving OS guideline for name {os_name}: {e}")
-            return None
+            self._logger.error(f"Error retrieving all OS guidelines: {e}")
+            return []
         finally:
             if conn:
                 conn.close()
@@ -164,12 +171,12 @@ class SQLiteOSGuidelineRepository(OSGuidelineRepository):
             cursor = conn.cursor()
             cursor.execute(
                 """
-                UPDATE os_guidelines SET guideline = ?, platform = ?, status = ?, updated_at = CURRENT_TIMESTAMP
+                UPDATE os_guidelines SET guideline = ?, target_system_id = ?, status = ?, updated_at = CURRENT_TIMESTAMP
                 WHERE id = ?;
                 """,
                 (
                     record.guideline,
-                    record.platform.lower().strip(),
+                    record.target_system_id,
                     record.status,
                     guideline_id,
                 ),

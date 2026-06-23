@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import List, Optional, Tuple
 from models import OSGuideline
 
 
@@ -23,8 +23,10 @@ class OSGuidelineService(ABC):
         pass
 
     @abstractmethod
-    def get_os_guideline_by_name(self, os_name: str) -> Optional[OSGuideline]:
+    def find_all_potential_guidelines(
+        self, target_system_id: Optional[int], platforms: List[str] = None
+    ) -> List[Tuple[int, OSGuideline]]:
         """
-        Retrieves OS guideline by name.
+        Finds all potential OS guidelines in the database matching the criteria.
         """
         pass

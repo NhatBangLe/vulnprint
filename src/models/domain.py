@@ -1,12 +1,68 @@
 from enum import Enum
-from typing import List, Optional
-from pydantic import BaseModel, Field
+from typing import List, Optional, Tuple
+from pydantic import BaseModel, Field, model_validator
 from .records import (
     OSGuidelineRecord,
     SoftwareGuidelineRecord,
     MSFModuleRecord,
     SoftwareRecord,
 )
+
+
+def parse_os_name(os_name: str, platform: str) -> Tuple[str, str, str]:
+    name = os_name.lower().strip()
+    plat = platform.lower().strip()
+
+    # 1. Extract architecture
+    architecture = "64-bit"  # default
+    if "32" in name:
+        architecture = "32-bit"
+    elif "64" in name:
+        architecture = "64-bit"
+
+    # Remove architecture part from the name to make version/distribution parsing easier
+    for term in ["(32-bit)", "(64-bit)", "32-bit", "64-bit", "(32)", "(64)"]:
+        name = name.replace(term, "")
+    name = name.strip()
+
+    distribution = ""
+    version = ""
+
+    if plat == "windows":
+        distribution = "windows"
+        name_clean = name.replace("windows", "").strip()
+        if "server" in name_clean:
+            distribution = "windows server"
+            name_clean = name_clean.replace("server", "").strip()
+            version = name_clean
+        else:
+            words = name_clean.split()
+            if words:
+                distribution = f"windows {words[0]}"
+                version = " ".join(words[1:])
+    else:
+        words = name.split()
+        if words:
+            dist_candidate = words[0]
+            if dist_candidate in [
+                "ubuntu",
+                "debian",
+                "centos",
+                "redhat",
+                "fedora",
+                "suse",
+                "alpine",
+                "mint",
+            ]:
+                distribution = dist_candidate
+                version = " ".join(words[1:])
+            else:
+                distribution = dist_candidate
+                version = " ".join(words[1:])
+        else:
+            distribution = plat
+
+    return distribution.strip(), version.strip(), architecture.strip()
 
 
 class MSFModule(BaseModel):
@@ -56,6 +112,11 @@ class Software(BaseModel):
     required_configs: List[str] = Field(
         default_factory=list, description="Required configurations of the software"
     )
+    target_system_id: Optional[int] = None
+    platform: str = ""
+    distribution: str = ""
+    version: str = ""
+    architecture: str = ""
 
     @classmethod
     def from_record(
@@ -71,6 +132,11 @@ class Software(BaseModel):
             name=software_rec.name,
             vulnerable_versions=software_rec.vulnerable_versions,
             required_configs=software_rec.required_configs,
+            target_system_id=software_rec.target_system_id,
+            platform=software_rec.platform,
+            distribution=software_rec.distribution,
+            version=software_rec.version,
+            architecture=software_rec.architecture,
         )
 
 
@@ -80,12 +146,33 @@ class GuidelineStatus(Enum):
     VERIFIED = "VERIFIED"
 
 
+class TargetSystem(BaseModel):
+    id: Optional[int] = None
+    platform: str
+    distribution: str = ""
+    version: str = ""
+    architecture: str = ""
+
+
 class OSGuideline(BaseModel):
     id: Optional[int] = None
     os_name: str
     guideline: str
     status: GuidelineStatus = GuidelineStatus.UNVERIFIED
+    target_system_id: Optional[int] = None
     platform: str = ""
+    distribution: str = ""
+    version: str = ""
+    architecture: str = ""
+
+    @model_validator(mode="after")
+    def populate_target_system_components(self) -> "OSGuideline":
+        if self.os_name and self.platform and not self.distribution:
+            dist, ver, arch = parse_os_name(self.os_name, self.platform)
+            self.distribution = dist
+            self.version = ver
+            self.architecture = arch
+        return self
 
     @classmethod
     def from_record(cls, record: OSGuidelineRecord) -> "OSGuideline":
@@ -103,12 +190,28 @@ class OSGuideline(BaseModel):
             case _:
                 raise ValueError(f"Invalid status: {record.status}")
 
+        # Dynamically reconstruct os_name from platform components
+        parts = []
+        if record.distribution:
+            parts.append(record.distribution)
+        else:
+            parts.append(record.platform)
+        if record.version:
+            parts.append(record.version)
+        if record.architecture:
+            parts.append(f"({record.architecture})")
+        os_name = " ".join(parts)
+
         return cls(
             id=record.id,
-            os_name=record.os_name,
+            os_name=os_name,
             guideline=record.guideline,
             status=real_status,
+            target_system_id=record.target_system_id,
             platform=record.platform,
+            distribution=record.distribution,
+            version=record.version,
+            architecture=record.architecture,
         )
 
 

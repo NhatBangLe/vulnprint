@@ -11,6 +11,7 @@ from repositories import (
     SQLiteSoftwareRepository,
     SQLiteOSGuidelineRepository,
     SQLiteSoftwareGuidelineRepository,
+    SQLiteTargetSystemRepository,
 )
 from database import SQLiteDatabaseManager
 from services import (
@@ -26,7 +27,11 @@ from services import (
     DefaultOSGuidelineService,
     DefaultSoftwareGuidelineService,
 )
-from agents import VulnerabilityTargetExtractorAgent, VMGuidelineGeneratorAgent
+from agents import (
+    VulnerabilityTargetExtractorAgent,
+    OSGuidelineGeneratorAgent,
+    SoftwareGuidelineGeneratorAgent,
+)
 from config import settings
 from utils import configure_logging
 
@@ -155,13 +160,18 @@ def setup_database_and_services(
     software_repo = SQLiteSoftwareRepository(db_manager=db_manager)
     os_guide_repo = SQLiteOSGuidelineRepository(db_manager=db_manager)
     sw_guide_repo = SQLiteSoftwareGuidelineRepository(db_manager=db_manager)
+    target_system_repo = SQLiteTargetSystemRepository(db_manager=db_manager)
 
     # Wrap repositories in Domain Services
     msf_service = DefaultMSFModuleService(
         msf_repo=msf_repo, software_repo=software_repo
     )
-    soft_service = DefaultSoftwareService(software_repo=software_repo)
-    os_guide_service = DefaultOSGuidelineService(os_guide_repo=os_guide_repo)
+    soft_service = DefaultSoftwareService(
+        software_repo=software_repo, target_system_repo=target_system_repo
+    )
+    os_guide_service = DefaultOSGuidelineService(
+        os_guide_repo=os_guide_repo, target_system_repo=target_system_repo
+    )
     sw_guide_service = DefaultSoftwareGuidelineService(sw_guide_repo=sw_guide_repo)
 
     return msf_service, soft_service, os_guide_service, sw_guide_service
@@ -405,9 +415,19 @@ def handle_search_ingestion(
         ai_api_key=settings.ai_api_key,
         ai_model=settings.ai_model,
     )
-    vm_guideline_generator_agent = VMGuidelineGeneratorAgent(
+    os_guideline_generator_agent = OSGuidelineGeneratorAgent(
         msf_service=msf_service,
         soft_service=soft_service,
+        ai_base_url=settings.ai_base_url,
+        ai_api_key=settings.ai_api_key,
+        ai_model=settings.ai_model,
+        tools=tools,
+        max_tool_calls=settings.mcp_max_tool_calls,
+    )
+    software_guideline_generator_agent = SoftwareGuidelineGeneratorAgent(
+        msf_service=msf_service,
+        soft_service=soft_service,
+        os_guide_service=os_guide_service,
         ai_base_url=settings.ai_base_url,
         ai_api_key=settings.ai_api_key,
         ai_model=settings.ai_model,
@@ -422,7 +442,8 @@ def handle_search_ingestion(
         output_dir=settings.blueprints_dir,
         os_guide_service=os_guide_service,
         sw_guide_service=sw_guide_service,
-        vm_guideline_generator_agent=vm_guideline_generator_agent,
+        os_guideline_generator_agent=os_guideline_generator_agent,
+        software_guideline_generator_agent=software_guideline_generator_agent,
     )
 
     logger.info(f"Executing search query: '{args.search}'")
@@ -469,6 +490,34 @@ def handle_search_ingestion(
         logger.info(
             f"[{idx}/{len(module_paths)}] Recording intelligence in database ledger..."
         )
+        # Extract and normalize platform for the target system
+        platform_str = ""
+        if module_details.platform:
+            for p in module_details.platform:
+                p_clean = p.lower().strip()
+                if p_clean in ["win", "windows"]:
+                    platform_str = "windows"
+                    break
+                elif p_clean in ["linux"]:
+                    platform_str = "linux"
+                    break
+                elif p_clean in ["osx", "darwin"]:
+                    platform_str = "osx"
+                    break
+                elif p_clean in ["solaris", "netware", "android", "ios", "unix"]:
+                    platform_str = p_clean
+                    break
+            if not platform_str:
+                platform_str = module_details.platform[0].lower().strip()
+
+        arch_str = ""
+        if slm_data.os_architecture:
+            arch_clean = slm_data.os_architecture.lower().strip()
+            if "32" in arch_clean:
+                arch_str = "32-bit"
+            elif "64" in arch_clean:
+                arch_str = "64-bit"
+
         msf_service.store_module(module_details)
         soft_service.store_software(
             Software(
@@ -477,6 +526,10 @@ def handle_search_ingestion(
                 vulnerable_versions=slm_data.vulnerable_versions,
                 required_configs=slm_data.required_configs,
                 name=slm_data.software_name,
+                platform=platform_str,
+                distribution=slm_data.os_distribution_or_edition or "",
+                version=slm_data.os_version_or_release or "",
+                architecture=arch_str,
             )
         )
 

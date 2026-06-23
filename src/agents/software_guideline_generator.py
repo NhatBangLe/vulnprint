@@ -1,40 +1,29 @@
 import logging
 import asyncio
-from typing import Optional, List, Tuple
+from typing import Optional, List
 from pydantic import BaseModel, Field, ValidationError
 from langchain_core.tools import BaseTool
 from langchain_openai import ChatOpenAI
 from langchain.agents import create_agent
 from langchain.agents.middleware import ToolCallLimitMiddleware
-from services import MSFModuleService, SoftwareService
-from models import OSGuideline, SoftwareGuideline, GuidelineStatus
+from services import MSFModuleService, SoftwareService, OSGuidelineService
+from models import SoftwareGuideline, GuidelineStatus
 from utils import handle_validation_error
 
 
-class VMGuidelineGeneratorResult(BaseModel):
-    platform: str = Field(
-        ...,
-        description="The target platform platform name, e.g. Linux, Windows.",
-    )
-    os_name: str = Field(
-        ...,
-        description="The specific name and version of the Operating System chosen, e.g. 'Ubuntu 24.04 LTS', 'Windows 10'.",
-    )
-    os_guideline: str = Field(
-        ...,
-        description="A detailed step-by-step Operating System Installation Guideline, including VM requirements, download sources, and OS setup steps in markdown format.",
-    )
+class SoftwareGuidelineGeneratorResult(BaseModel):
     software_guideline: str = Field(
         ...,
         description="A detailed step-by-step Software Installation Guideline for installing the vulnerable target software/version on the chosen OS in markdown format.",
     )
 
 
-class VMGuidelineGeneratorAgent:
+class SoftwareGuidelineGeneratorAgent:
     def __init__(
         self,
         msf_service: MSFModuleService,
         soft_service: SoftwareService,
+        os_guide_service: OSGuidelineService,
         ai_base_url: str,
         ai_api_key: str,
         ai_model: str,
@@ -44,6 +33,7 @@ class VMGuidelineGeneratorAgent:
     ):
         self.msf_service = msf_service
         self.soft_service = soft_service
+        self.os_guide_service = os_guide_service
 
         self.ai_base_url = ai_base_url
         self.ai_api_key = ai_api_key
@@ -53,7 +43,7 @@ class VMGuidelineGeneratorAgent:
         self.tools = tools
 
         self.agent = create_agent(
-            name="VM Guideline Generator Agent",
+            name="Software Guideline Generator Agent",
             model=ChatOpenAI(
                 base_url=self.ai_base_url,
                 api_key=self.ai_api_key,
@@ -65,25 +55,23 @@ class VMGuidelineGeneratorAgent:
             system_prompt=(
                 "You are an agentic cybersecurity lab setup engineer. "
                 "Your goal is to search the web using the provided tools to locate installation instructions, "
-                "vulnerable packages, and virtual machine setups for a specific Metasploit module target. "
-                "You must locate where to download the legacy target, install steps, and system prerequisites. "
-                "Use the tools iteratively as needed up to the limit. Once you have enough information, "
-                "compile a highly practical Operating System installation guide (for base VM setup) and "
-                "a separate Software installation guide (for setting up the vulnerable package) for this module target."
+                "vulnerable packages, and configuration steps for a specific software target on a chosen Operating System. "
+                "Compile a highly practical, step-by-step Software Installation Guideline for installing and configuring the "
+                "vulnerable target software/version on the chosen OS in markdown format."
             ),
-            response_format=VMGuidelineGeneratorResult,
+            response_format=SoftwareGuidelineGeneratorResult,
         )
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def generate(
-        self, msf_path: str
-    ) -> Optional[Tuple[OSGuideline, SoftwareGuideline]]:
+        self, msf_path: str, os_guideline_id: int
+    ) -> Optional[SoftwareGuideline]:
         """
         Synchronously communicates with tools, lets the LLM execute search queries,
-        and returns the synthesized guidelines.
+        and returns the software guideline based on the base OS installation.
         """
         self._logger.info(
-            f"Starting agentic guideline generation workflow for module: {msf_path}"
+            f"Starting agentic software guideline generation workflow for module: {msf_path} using OS guideline ID: {os_guideline_id}"
         )
 
         msf_module = self.msf_service.get_module_by_path(msf_path)
@@ -94,6 +82,13 @@ class VMGuidelineGeneratorAgent:
         software = self.soft_service.get_software_by_path(msf_path)
         if not software:
             self._logger.error(f"Software not found in database: {msf_path}")
+            return None
+
+        os_guideline = self.os_guide_service.get_os_guideline_by_id(os_guideline_id)
+        if not os_guideline:
+            self._logger.error(
+                f"OS Guideline ID {os_guideline_id} not found in database."
+            )
             return None
 
         cves_str = ", ".join(software.cves) if software.cves else "None"
@@ -110,12 +105,13 @@ class VMGuidelineGeneratorAgent:
 
         try:
             user_content = (
-                f"Generate a Virtual Machine OS and Software Installation Guideline for this Metasploit module:\n"
-                f"Module Path: {msf_module.path}\n"
-                f"Description: {msf_module.description}\n"
+                f"Generate a step-by-step Software Installation Guideline to set up the vulnerable software on the following base Operating System:\n"
+                f"Base OS Name: {os_guideline.os_name}\n"
+                f"Base OS Setup Instructions:\n{os_guideline.guideline}\n\n"
+                f"Target Metasploit Module Path: {msf_module.path}\n"
+                f"Module Description: {msf_module.description}\n"
                 f"Associated CVEs: {cves_str}\n"
-                f"Software Target: {software.name}\n"
-                f"Available target platforms: {msf_module.platforms}\n"
+                f"Software Target Name: {software.name}\n"
                 f"Vulnerable Versions: {versions_str}\n"
                 f"Required Configurations: {configs_str}\n"
             )
@@ -127,29 +123,22 @@ class VMGuidelineGeneratorAgent:
             )
             parsed_content = result["structured_response"]
 
-            if not isinstance(parsed_content, VMGuidelineGeneratorResult):
+            if not isinstance(parsed_content, SoftwareGuidelineGeneratorResult):
                 self._logger.warning(
-                    "Cannot parse VM Guideline Generator result from LLM output."
+                    "Cannot parse Software Guideline Generator result from LLM output."
                 )
                 return None
-            return (
-                OSGuideline(
-                    os_name=parsed_content.os_name,
-                    guideline=parsed_content.os_guideline,
-                    platform=parsed_content.platform,
-                    status=GuidelineStatus.UNVERIFIED,
-                ),
-                SoftwareGuideline(
-                    guideline=parsed_content.software_guideline,
-                    os_guideline_id=0,
-                    software_id=0,
-                    status=GuidelineStatus.UNVERIFIED,
-                    path=msf_path,
-                ),
+
+            return SoftwareGuideline(
+                guideline=parsed_content.software_guideline,
+                os_guideline_id=os_guideline_id,
+                software_id=software.id,
+                status=GuidelineStatus.UNVERIFIED,
+                path=msf_path,
             )
         except ValidationError as e:
             handle_validation_error(e, self._logger)
             return None
         except Exception as e:
-            self._logger.error(f"Error during agent invocation: {e}")
+            self._logger.error(f"Error during software agent invocation: {e}")
             return None

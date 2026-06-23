@@ -1,7 +1,9 @@
 from .extractor import VulnerabilityTargetExtractorAgent
-from .vm_guideline_generator import VMGuidelineGeneratorAgent
+from .os_guideline_generator import OSGuidelineGeneratorAgent
+from .software_guideline_generator import SoftwareGuidelineGeneratorAgent
 
 __all__ = [
     "VulnerabilityTargetExtractorAgent",
-    "VMGuidelineGeneratorAgent",
+    "OSGuidelineGeneratorAgent",
+    "SoftwareGuidelineGeneratorAgent",
 ]

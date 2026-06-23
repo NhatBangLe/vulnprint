@@ -246,9 +246,10 @@ class SQLiteSoftwareGuidelineRepository(SoftwareGuidelineRepository):
             # Get all guidelines, their linked modules, and software targets
             cursor.execute(
                 """
-                SELECT sg.id, sg.guideline, sg.status, og.platform, mg.module_path, s.name, s.vulnerable_versions
+                SELECT sg.id, sg.guideline, sg.status, ts.platform, mg.module_path, s.name, s.vulnerable_versions
                 FROM software_guidelines sg
                 LEFT JOIN os_guidelines og ON sg.os_guideline_id = og.id
+                LEFT JOIN target_systems ts ON og.target_system_id = ts.id
                 LEFT JOIN module_guidelines mg ON sg.id = mg.guideline_id
                 LEFT JOIN software s ON mg.module_path = s.path;
                 """

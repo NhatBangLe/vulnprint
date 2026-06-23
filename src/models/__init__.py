@@ -8,12 +8,14 @@ from .domain import (
     VMGuidelineCoverageStats,
     MSFModule,
     Software,
+    TargetSystem,
 )
 from .records import (
     MSFModuleRecord,
     SoftwareRecord,
     OSGuidelineRecord,
     SoftwareGuidelineRecord,
+    TargetSystemRecord,
 )
 from .metasploit import MetasploitModuleDetails
 
@@ -30,6 +32,8 @@ __all__ = [
     "SoftwareRecord",
     "OSGuidelineRecord",
     "SoftwareGuidelineRecord",
+    "TargetSystemRecord",
     "MSFModule",
     "Software",
+    "TargetSystem",
 ]

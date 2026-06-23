@@ -16,9 +16,9 @@ class OSGuidelineRepository(ABC):
         pass
 
     @abstractmethod
-    def exists_by_name(self, os_name: str) -> Optional[int]:
+    def exists_by_target_system(self, target_system_id: int) -> Optional[int]:
         """
-        Checks if an OS guideline already exists for the given OS name.
+        Checks if an OS guideline already exists for the given Target System ID.
         """
         pass
 
@@ -37,8 +37,8 @@ class OSGuidelineRepository(ABC):
         pass
 
     @abstractmethod
-    def get_by_name(self, os_name: str) -> Optional[OSGuidelineRecord]:
+    def get_all_guidelines(self) -> list[OSGuidelineRecord]:
         """
-        Retrieves an OS guideline by its unique name.
+        Retrieves all OS guidelines.
         """
         pass

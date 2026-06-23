@@ -1,5 +1,5 @@
 import logging
-from typing import List, Optional, Tuple
+from typing import List, Optional
 from repositories import SoftwareGuidelineRepository
 from .base import SoftwareGuidelineService
 from models import (
@@ -75,52 +75,6 @@ class DefaultSoftwareGuidelineService(SoftwareGuidelineService):
 
     def link_guideline_to_module(self, msf_path: str, guideline_id: int) -> None:
         self.sw_guide_repo.link_guideline_to_module(msf_path, guideline_id)
-
-    def find_all_potential_guidelines(
-        self, platform: List[str], software_name: str, vulnerable_versions: List[str]
-    ) -> List[Tuple[int, SoftwareGuideline]]:
-        normalized_target_software = software_name.lower().strip()
-        metadata_list = self.sw_guide_repo.get_guidelines_with_software_metadata()
-
-        candidates = []
-        for meta in metadata_list:
-            if len(meta.associated_software_name) == 0:
-                continue
-            if (
-                normalized_target_software
-                != meta.associated_software_name.lower().strip()
-            ):
-                continue
-
-            score = 0
-
-            # 1. Platform score
-            if platform and meta.associated_platforms:
-                overlap = set(p.lower().strip() for p in platform) & set(
-                    ap.lower().strip() for ap in meta.associated_platforms
-                )
-                if len(overlap) > 0:
-                    score += 30
-            elif len(platform) == 0 or len(meta.associated_platforms) == 0:
-                score += 15
-
-            # 2. Version score
-            if vulnerable_versions and meta.associated_versions:
-                overlap = set(v.lower().strip() for v in vulnerable_versions) & set(
-                    av.lower().strip() for av in meta.associated_versions
-                )
-                if len(overlap) > 0:
-                    score += 40
-            elif len(vulnerable_versions) == 0 or len(meta.associated_versions) == 0:
-                score += 20
-
-            # Compatibility threshold check (50 points required)
-            if score >= 50:
-                guideline = self.get_software_guideline(meta.guideline_id)
-                if guideline:
-                    candidates.append((score, guideline))
-
-        return candidates
 
     def get_guideline_coverage_stats(self) -> VMGuidelineCoverageStats:
         metadata_list = self.sw_guide_repo.get_guidelines_with_software_metadata()

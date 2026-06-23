@@ -14,6 +14,14 @@ class MSFModuleRecord(BaseModel):
     description: str = ""
 
 
+class TargetSystemRecord(BaseModel):
+    id: Optional[int] = None
+    platform: str
+    distribution: str = ""
+    version: str = ""
+    architecture: str = ""
+
+
 class SoftwareRecord(BaseModel):
     id: Optional[int] = None
     path: str
@@ -21,13 +29,21 @@ class SoftwareRecord(BaseModel):
     cves: List[str] = Field(default_factory=list)
     vulnerable_versions: List[str] = Field(default_factory=list)
     required_configs: List[str] = Field(default_factory=list)
+    target_system_id: Optional[int] = None
+    platform: str = ""
+    distribution: str = ""
+    version: str = ""
+    architecture: str = ""
 
 
 class OSGuidelineRecord(BaseModel):
     id: Optional[int] = None
-    os_name: str
     guideline: str
+    target_system_id: Optional[int] = None
     platform: str = ""
+    distribution: str = ""
+    version: str = ""
+    architecture: str = ""
     status: str = "UNVERIFIED"
     created_at: Optional[str] = None
     updated_at: Optional[str] = None

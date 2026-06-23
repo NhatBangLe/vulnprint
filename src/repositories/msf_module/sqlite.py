@@ -305,17 +305,43 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
             conn = self.db_manager.get_connection()
             cursor = conn.cursor()
             query = """
-                SELECT m.id, m.path, m.display_name, m.type, m.rank, m.disclosure_date,
-                       (SELECT group_concat(platform) FROM module_platforms WHERE module_path = m.path) as platforms,
-                       m.documentation, m.description,
-                       s.id as software_id, s.name as software_name, s.cves, s.vulnerable_versions, s.required_configs,
-                       sg.id as guideline_id, sg.guideline as software_guideline, sg.status, og.platform as guideline_platform,
-                       og.id as os_guideline_id, og.os_name, og.guideline as os_guideline
+                SELECT 
+                    m.id, 
+                    m.path, 
+                    m.display_name, 
+                    m.type, 
+                    m.rank, 
+                    m.disclosure_date,
+                    (SELECT group_concat(platform) FROM module_platforms WHERE module_path = m.path) AS platforms,
+                    m.documentation, 
+                    m.description,
+                    s.id AS software_id, 
+                    s.name AS software_name, 
+                    s.cves, 
+                    s.vulnerable_versions, 
+                    s.required_configs, 
+                    s.target_system_id AS soft_target_system_id,
+                    ts_s.platform AS soft_platform, 
+                    ts_s.distribution AS soft_distribution, 
+                    ts_s.version AS soft_version, 
+                    ts_s.architecture AS soft_architecture,
+                    sg.id AS guideline_id, 
+                    sg.guideline AS software_guideline, 
+                    sg.status,
+                    og.id AS os_guideline_id, 
+                    og.guideline AS os_guideline, 
+                    og.target_system_id AS os_target_system_id,
+                    ts_og.platform AS os_platform, 
+                    ts_og.distribution AS os_distribution, 
+                    ts_og.version AS os_version, 
+                    ts_og.architecture AS os_architecture
                 FROM msf_modules m
                 LEFT JOIN software s ON m.path = s.path
+                LEFT JOIN target_systems ts_s ON s.target_system_id = ts_s.id
                 LEFT JOIN module_guidelines mg ON m.path = mg.module_path
                 LEFT JOIN software_guidelines sg ON mg.guideline_id = sg.id
                 LEFT JOIN os_guidelines og ON sg.os_guideline_id = og.id
+                LEFT JOIN target_systems ts_og ON og.target_system_id = ts_og.id
                 WHERE 1=1
             """
             params = []
@@ -351,13 +377,21 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
                     cves_raw,
                     versions_raw,
                     configs_raw,
+                    soft_target_system_id,
+                    soft_platform,
+                    soft_distribution,
+                    soft_version,
+                    soft_architecture,
                     guideline_id,
                     software_guideline,
                     status,
-                    guideline_platform,
                     os_guideline_id,
-                    os_name,
                     os_guideline,
+                    os_target_system_id,
+                    os_platform,
+                    os_distribution,
+                    os_version,
+                    os_architecture,
                 ) = row
 
                 m_rec = MSFModuleRecord(
@@ -383,6 +417,11 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
                             json.loads(versions_raw) if versions_raw else []
                         ),
                         required_configs=json.loads(configs_raw) if configs_raw else [],
+                        target_system_id=soft_target_system_id,
+                        platform=soft_platform or "",
+                        distribution=soft_distribution or "",
+                        version=soft_version or "",
+                        architecture=soft_architecture or "",
                     )
 
                 sg_rec = None
@@ -397,9 +436,12 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
                     )
                     og_rec = OSGuidelineRecord(
                         id=os_guideline_id,
-                        os_name=os_name or "",
                         guideline=os_guideline or "",
-                        platform=guideline_platform or "",
+                        target_system_id=os_target_system_id,
+                        platform=os_platform or "",
+                        distribution=os_distribution or "",
+                        version=os_version or "",
+                        architecture=os_architecture or "",
                         status="VERIFIED",
                     )
 

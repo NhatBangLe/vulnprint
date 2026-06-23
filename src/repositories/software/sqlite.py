@@ -29,8 +29,8 @@ class SQLiteSoftwareRepository(SoftwareRepository):
 
             cursor.execute(
                 """
-            INSERT INTO software (path, name, cves, vulnerable_versions, required_configs)
-            VALUES (?, ?, ?, ?, ?);
+            INSERT INTO software (path, name, cves, vulnerable_versions, required_configs, target_system_id)
+            VALUES (?, ?, ?, ?, ?, ?);
             """,
                 (
                     record.path,
@@ -38,6 +38,7 @@ class SQLiteSoftwareRepository(SoftwareRepository):
                     json.dumps(record.cves),
                     json.dumps(record.vulnerable_versions),
                     json.dumps(record.required_configs),
+                    record.target_system_id,
                 ),
             )
             conn.commit()
@@ -90,7 +91,13 @@ class SQLiteSoftwareRepository(SoftwareRepository):
             conn = self.db_manager.get_connection()
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT id, path, name, cves, vulnerable_versions, required_configs FROM software WHERE id = ?;",
+                """
+                SELECT s.id, s.path, s.name, s.cves, s.vulnerable_versions, s.required_configs, s.target_system_id,
+                       ts.platform, ts.distribution, ts.version, ts.architecture
+                FROM software s
+                LEFT JOIN target_systems ts ON s.target_system_id = ts.id
+                WHERE s.id = ?;
+                """,
                 (software_id,),
             )
             row = cursor.fetchone()
@@ -103,6 +110,11 @@ class SQLiteSoftwareRepository(SoftwareRepository):
                 cves=json.loads(row[3]) if row[3] else [],
                 vulnerable_versions=json.loads(row[4]) if row[4] else [],
                 required_configs=json.loads(row[5]) if row[5] else [],
+                target_system_id=row[6],
+                platform=row[7] or "",
+                distribution=row[8] or "",
+                version=row[9] or "",
+                architecture=row[10] or "",
             )
         except Exception as e:
             self._logger.error(
@@ -119,7 +131,13 @@ class SQLiteSoftwareRepository(SoftwareRepository):
             conn = self.db_manager.get_connection()
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT id, path, name, cves, vulnerable_versions, required_configs FROM software WHERE path = ?;",
+                """
+                SELECT s.id, s.path, s.name, s.cves, s.vulnerable_versions, s.required_configs, s.target_system_id,
+                       ts.platform, ts.distribution, ts.version, ts.architecture
+                FROM software s
+                LEFT JOIN target_systems ts ON s.target_system_id = ts.id
+                WHERE s.path = ?;
+                """,
                 (msf_path,),
             )
             row = cursor.fetchone()
@@ -132,6 +150,11 @@ class SQLiteSoftwareRepository(SoftwareRepository):
                 cves=json.loads(row[3]) if row[3] else [],
                 vulnerable_versions=json.loads(row[4]) if row[4] else [],
                 required_configs=json.loads(row[5]) if row[5] else [],
+                target_system_id=row[6],
+                platform=row[7] or "",
+                distribution=row[8] or "",
+                version=row[9] or "",
+                architecture=row[10] or "",
             )
         except Exception as e:
             self._logger.error(f"Error retrieving software details for {msf_path}: {e}")
@@ -213,12 +236,14 @@ class SQLiteSoftwareRepository(SoftwareRepository):
             cursor = conn.cursor()
             cursor.execute(
                 """
-                UPDATE software SET cves = ?, vulnerable_versions = ?, required_configs = ? WHERE id = ?;
+                UPDATE software SET cves = ?, vulnerable_versions = ?, required_configs = ?, target_system_id = ? 
+                WHERE id = ?;
                 """,
                 (
                     json.dumps(record.cves),
                     json.dumps(record.vulnerable_versions),
                     json.dumps(record.required_configs),
+                    record.target_system_id,
                     software_id,
                 ),
             )
