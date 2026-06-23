@@ -5,8 +5,6 @@ from models import (
     MSFModuleRecord,
     MSFModule,
     Software,
-    SoftwareGuideline,
-    OSGuideline,
 )
 from .base import MSFModuleService
 
@@ -79,25 +77,16 @@ class DefaultMSFModuleService(MSFModuleService):
         software_pattern: Optional[str] = None,
         platform: Optional[str] = None,
         rank: Optional[str] = None,
-    ) -> List[
-        Tuple[
-            MSFModule,
-            Optional[Software],
-            Optional[SoftwareGuideline],
-            Optional[OSGuideline],
-        ]
-    ]:
+    ) -> List[Tuple[MSFModule, Optional[Software]]]:
         joined_records = self.msf_repo.search_modules(
             software_pattern=software_pattern, platform=platform, rank=rank
         )
         results = []
-        for m_rec, s_rec, sg_rec, osg_rec in joined_records:
+        for m_rec, s_rec in joined_records:
             results.append(
                 (
                     MSFModule.from_record(m_rec),
                     Software.from_record(s_rec) if s_rec else None,
-                    SoftwareGuideline.from_record(sg_rec) if sg_rec else None,
-                    OSGuideline.from_record(osg_rec) if osg_rec else None,
                 )
             )
         return results

@@ -27,7 +27,7 @@ class DefaultSoftwareGuidelineService(SoftwareGuidelineService):
             id=software_guideline.id,
             path=software_guideline.path,
             guideline=software_guideline.guideline,
-            os_guideline_id=software_guideline.os_guideline_id,
+            os_guideline_ids=software_guideline.os_guideline_ids,
             software_id=software_guideline.software_id,
             status=software_guideline.status.value,
         )
@@ -76,7 +76,9 @@ class DefaultSoftwareGuidelineService(SoftwareGuidelineService):
     def link_guideline_to_module(self, msf_path: str, guideline_id: int) -> None:
         self.sw_guide_repo.link_guideline_to_module(msf_path, guideline_id)
 
-    def get_software_guidelines_by_os_id(self, os_guideline_id: int) -> List[SoftwareGuideline]:
+    def get_software_guidelines_by_os_id(
+        self, os_guideline_id: int
+    ) -> List[SoftwareGuideline]:
         records = self.sw_guide_repo.get_by_os_guideline_id(os_guideline_id)
         results = []
         for record in records:

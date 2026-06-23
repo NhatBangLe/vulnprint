@@ -53,7 +53,7 @@ class SoftwareGuidelineRecord(BaseModel):
     id: Optional[int] = None
     path: str = ""
     guideline: str
-    os_guideline_id: int
+    os_guideline_ids: List[int] = Field(default_factory=list)
     software_id: int
     status: str = "UNVERIFIED"
     created_at: Optional[str] = None

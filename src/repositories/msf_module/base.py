@@ -3,8 +3,6 @@ from typing import List, Optional, Tuple
 from models import (
     MSFModuleRecord,
     SoftwareRecord,
-    OSGuidelineRecord,
-    SoftwareGuidelineRecord,
 )
 
 
@@ -89,14 +87,7 @@ class MSFModuleRepository(ABC):
         software_pattern: Optional[str] = None,
         platform: Optional[str] = None,
         rank: Optional[str] = None,
-    ) -> List[
-        Tuple[
-            MSFModuleRecord,
-            Optional[SoftwareRecord],
-            Optional[SoftwareGuidelineRecord],
-            Optional[OSGuidelineRecord],
-        ]
-    ]:
+    ) -> List[Tuple[MSFModuleRecord, Optional[SoftwareRecord]]]:
         """
         Searches modules joining software and guideline tables.
         Returns a list of tuples containing records.

@@ -331,7 +331,7 @@ class CLIAnalyticsService(AnalyticsService):
                 buf.save()
                 return
 
-            for msf_module, software, sg, osg in search_results:
+            for msf_module, software in search_results:
                 buf.write(f" [+] {msf_module.display_name}")
                 buf.write(f"     Exploit Path: {msf_module.path}")
                 buf.write(f"     Platform/OS:  {', '.join(msf_module.platforms)}")

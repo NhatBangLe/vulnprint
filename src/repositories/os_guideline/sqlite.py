@@ -203,10 +203,10 @@ class SQLiteOSGuidelineRepository(OSGuidelineRepository):
                 """
                 SELECT og.id, og.guideline, og.target_system_id, og.status,
                        ts.platform, ts.distribution, ts.version, ts.architecture,
-                       og.created_at, og.updated_at, COUNT(sg.id) AS sw_count
+                       og.created_at, og.updated_at, COUNT(sg_og.software_guideline_id) AS sw_count
                 FROM os_guidelines og
                 JOIN target_systems ts ON og.target_system_id = ts.id
-                LEFT JOIN software_guidelines sg ON og.id = sg.os_guideline_id
+                LEFT JOIN software_guidelines_os_guidelines sg_og ON og.id = sg_og.os_guideline_id
                 GROUP BY og.id
                 ORDER BY sw_count DESC, ts.platform ASC;
                 """

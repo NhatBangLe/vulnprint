@@ -207,10 +207,41 @@ def handle_review_mode(
         software_name = software.name if software else "Unknown"
         cves = software.cves if software else []
 
-        os_guide = os_guide_service.get_os_guideline_by_id(sw_guide.os_guideline_id)
-        os_name = os_guide.os_name if os_guide else "Unknown OS"
+        os_guides = [
+            os_guide_service.get_os_guideline_by_id(og_id)
+            for og_id in sw_guide.os_guideline_ids
+        ]
+        os_guides = [og for og in os_guides if og is not None]
+
+        selected_os_guide = None
+        if os_guides:
+            if len(os_guides) > 1:
+                print(f"\nMultiple OS guidelines linked for software guideline {path}:")
+                for o_idx, og in enumerate(os_guides, 1):
+                    print(f"  [{o_idx}] {og.os_name}")
+                while True:
+                    try:
+                        o_choice = input(
+                            f"Select OS Guideline to review [1-{len(os_guides)}] (default 1): "
+                        ).strip()
+                    except EOFError:
+                        selected_os_guide = os_guides[0]
+                        break
+                    if not o_choice:
+                        selected_os_guide = os_guides[0]
+                        break
+                    if o_choice.isdigit() and 1 <= int(o_choice) <= len(os_guides):
+                        selected_os_guide = os_guides[int(o_choice) - 1]
+                        break
+                    print("Invalid choice.")
+            else:
+                selected_os_guide = os_guides[0]
+
+        os_name = selected_os_guide.os_name if selected_os_guide else "Unknown OS"
         os_guideline_text = (
-            os_guide.guideline if os_guide else "No OS setup instructions."
+            selected_os_guide.guideline
+            if selected_os_guide
+            else "No OS setup instructions."
         )
 
         print(f"\n==================================================")
@@ -319,9 +350,44 @@ def handle_export_guide_mode(
 
     output_parts = []
     for sw_guide in sw_guidelines:
-        os_guide = os_guide_service.get_os_guideline_by_id(sw_guide.os_guideline_id)
-        os_name = os_guide.os_name if os_guide else "Unknown OS"
-        os_text = os_guide.guideline if os_guide else "No OS setup instructions."
+        os_guides = [
+            os_guide_service.get_os_guideline_by_id(og_id)
+            for og_id in sw_guide.os_guideline_ids
+        ]
+        os_guides = [og for og in os_guides if og is not None]
+
+        selected_os_guide = None
+        if os_guides:
+            if len(os_guides) > 1:
+                print(
+                    f"\nMultiple OS guidelines linked to software guideline (ID: {sw_guide.id}):"
+                )
+                for o_idx, og in enumerate(os_guides, 1):
+                    print(f"  [{o_idx}] {og.os_name}")
+                while True:
+                    try:
+                        o_choice = input(
+                            f"Select OS Guideline to export [1-{len(os_guides)}] (default 1): "
+                        ).strip()
+                    except EOFError:
+                        selected_os_guide = os_guides[0]
+                        break
+                    if not o_choice:
+                        selected_os_guide = os_guides[0]
+                        break
+                    if o_choice.isdigit() and 1 <= int(o_choice) <= len(os_guides):
+                        selected_os_guide = os_guides[int(o_choice) - 1]
+                        break
+                    print("Invalid choice.")
+            else:
+                selected_os_guide = os_guides[0]
+
+        os_name = selected_os_guide.os_name if selected_os_guide else "Unknown OS"
+        os_text = (
+            selected_os_guide.guideline
+            if selected_os_guide
+            else "No OS setup instructions."
+        )
         output_parts.append(
             f"# VM Installation Guideline for: {sw_guide.path} (ID: {sw_guide.id})\n"
             f"Verification Status: {sw_guide.status.value}\n\n"
@@ -384,16 +450,37 @@ def handle_export_guideline_by_os_mode(
             "No software installations are associated with this OS Guideline yet.\n"
         )
     else:
-        for idx, sw_guide in enumerate(sw_guidelines, 1):
+        from collections import OrderedDict
+
+        grouped = OrderedDict()
+        for sw_guide in sw_guidelines:
             software = soft_service.get_software_by_id(sw_guide.software_id)
             software_name = software.name if software else "Unknown Software"
-            output_parts.append(
-                f"### {idx}. Software: {software_name} (Path: {sw_guide.path})\n"
-                f"Software Guideline ID: {sw_guide.id}\n"
-                f"Verification Status: {sw_guide.status.value}\n\n"
-                f"{sw_guide.guideline}\n\n"
-                f"---\n\n"
-            )
+            grouped.setdefault(software_name, []).append(sw_guide)
+
+        for idx, (software_name, guidelines) in enumerate(grouped.items(), 1):
+            if len(guidelines) == 1:
+                sw_guide = guidelines[0]
+                output_parts.append(
+                    f"### {idx}. Software: {software_name} (Path: `{sw_guide.path}`)\n"
+                    f"- **Software Guideline ID:** {sw_guide.id}\n"
+                    f"- **Verification Status:** {sw_guide.status.value}\n\n"
+                    f"{sw_guide.guideline}\n\n"
+                )
+            else:
+                output_parts.append(f"### {idx}. Software: {software_name}\n")
+                output_parts.append(
+                    f"Multiple vulnerability profiles and configurations are registered for this software under the target OS. "
+                    f"Please follow the setup instructions for the specific Metasploit module path you are deploying:\n\n"
+                )
+                for sw_guide in guidelines:
+                    output_parts.append(
+                        f"#### 📦 Module: `{sw_guide.path}`\n"
+                        f"- **Software Guideline ID:** {sw_guide.id}\n"
+                        f"- **Verification Status:** {sw_guide.status.value}\n\n"
+                        f"{sw_guide.guideline}\n\n"
+                    )
+            output_parts.append("---\n\n")
 
     output_text = "".join(output_parts).rstrip("\n-") + "\n"
 

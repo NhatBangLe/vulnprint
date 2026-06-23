@@ -231,7 +231,9 @@ class SoftwareGuideline(BaseModel):
     id: Optional[int] = None
     path: str = Field(..., description="MSF module path")
     guideline: str = Field(..., description="Software guideline")
-    os_guideline_id: int = Field(..., description="OS guideline ID")
+    os_guideline_ids: List[int] = Field(
+        default_factory=list, description="OS guideline IDs"
+    )
     software_id: int = Field(..., description="Software ID")
     status: GuidelineStatus = Field(..., description="Guideline status")
 
@@ -255,7 +257,7 @@ class SoftwareGuideline(BaseModel):
             id=record.id,
             path=record.path,
             guideline=record.guideline,
-            os_guideline_id=record.os_guideline_id,
+            os_guideline_ids=record.os_guideline_ids,
             software_id=record.software_id,
             status=real_status,
         )

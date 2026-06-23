@@ -105,13 +105,24 @@ class SQLiteDatabaseManager(DatabaseManager):
             CREATE TABLE IF NOT EXISTS software_guidelines (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 guideline TEXT NOT NULL,
-                os_guideline_id INTEGER NOT NULL,
                 software_id INTEGER NOT NULL,
                 status TEXT DEFAULT 'UNVERIFIED',
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (os_guideline_id) REFERENCES os_guidelines(id) ON DELETE CASCADE,
                 FOREIGN KEY (software_id) REFERENCES software(id) ON DELETE CASCADE
+            );
+            """
+            )
+
+            # software_guidelines_os_guidelines table (many-to-many junction table)
+            cursor.execute(
+                """
+            CREATE TABLE IF NOT EXISTS software_guidelines_os_guidelines (
+                software_guideline_id INTEGER NOT NULL,
+                os_guideline_id INTEGER NOT NULL,
+                PRIMARY KEY (software_guideline_id, os_guideline_id),
+                FOREIGN KEY (software_guideline_id) REFERENCES software_guidelines(id) ON DELETE CASCADE,
+                FOREIGN KEY (os_guideline_id) REFERENCES os_guidelines(id) ON DELETE CASCADE
             );
             """
             )

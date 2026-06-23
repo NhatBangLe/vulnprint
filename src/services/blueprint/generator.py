@@ -70,13 +70,40 @@ class MarkdownBlueprintService(BlueprintService):
                 )
                 data["software_guideline"] = selected_sw_guide.guideline
 
-                # Fetch corresponding OS Guideline
-                os_guide = self.os_guide_service.get_os_guideline_by_id(
-                    selected_sw_guide.os_guideline_id
+                # Fetch corresponding OS Guideline - we want the highest-scoring one among all linked OS guidelines
+                potential_os_guides = (
+                    self.os_guide_service.find_all_potential_guidelines(
+                        target_system_id=software.target_system_id,
+                        platforms=msf_module.platforms,
+                    )
                 )
-                if os_guide:
-                    data["os_guideline"] = os_guide.guideline
-                    data["os_name"] = os_guide.os_name
+                linked_potential_os_guides = [
+                    (score, og)
+                    for score, og in potential_os_guides
+                    if og.id in selected_sw_guide.os_guideline_ids
+                ]
+
+                highest_score_os_guide = None
+                if linked_potential_os_guides:
+                    highest_score_os_guide = max(
+                        linked_potential_os_guides, key=lambda x: x[0]
+                    )[1]
+                elif potential_os_guides:
+                    highest_score_os_guide = max(
+                        potential_os_guides, key=lambda x: x[0]
+                    )[1]
+                else:
+                    highest_score_os_guide = (
+                        self.os_guide_service.get_os_guideline_by_id(
+                            selected_sw_guide.os_guideline_ids[0]
+                        )
+                        if selected_sw_guide.os_guideline_ids
+                        else None
+                    )
+
+                if highest_score_os_guide:
+                    data["os_guideline"] = highest_score_os_guide.guideline
+                    data["os_name"] = highest_score_os_guide.os_name
             else:
                 self._logger.info(
                     f"Guideline for {msf_path} not directly found. Searching for suitable existing OS guideline..."
@@ -104,7 +131,11 @@ class MarkdownBlueprintService(BlueprintService):
                         msf_path, os_guideline_id
                     )
                     if sw_guide:
-                        sw_guide.os_guideline_id = os_guideline_id
+                        sw_guide.os_guideline_ids = [os_guideline_id] + [
+                            g[1].id
+                            for g in potential_os_guides
+                            if g[1].id != os_guideline_id
+                        ]
                         sw_guide.software_id = (
                             software.id if software and software.id else 1
                         )
@@ -145,7 +176,7 @@ class MarkdownBlueprintService(BlueprintService):
                             msf_path, os_guideline_id
                         )
                         if sw_guide:
-                            sw_guide.os_guideline_id = os_guideline_id
+                            sw_guide.os_guideline_ids = [os_guideline_id]
                             sw_guide.software_id = (
                                 software.id if software and software.id else 1
                             )

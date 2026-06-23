@@ -23,12 +23,11 @@ class SQLiteSoftwareGuidelineRepository(SoftwareGuidelineRepository):
             cursor = conn.cursor()
             cursor.execute(
                 """
-                INSERT INTO software_guidelines (guideline, os_guideline_id, software_id, status, created_at, updated_at)
-                VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+                INSERT INTO software_guidelines (guideline, software_id, status, created_at, updated_at)
+                VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
                 """,
                 (
                     record.guideline,
-                    record.os_guideline_id,
                     record.software_id,
                     record.status,
                 ),
@@ -41,6 +40,15 @@ class SQLiteSoftwareGuidelineRepository(SoftwareGuidelineRepository):
                 """,
                 (record.path, guideline_id),
             )
+            if record.os_guideline_ids:
+                for og_id in record.os_guideline_ids:
+                    cursor.execute(
+                        """
+                        INSERT OR IGNORE INTO software_guidelines_os_guidelines (software_guideline_id, os_guideline_id)
+                        VALUES (?, ?);
+                        """,
+                        (guideline_id, og_id),
+                    )
             conn.commit()
             return guideline_id
         except Exception as e:
@@ -98,7 +106,7 @@ class SQLiteSoftwareGuidelineRepository(SoftwareGuidelineRepository):
             cursor = conn.cursor()
             cursor.execute(
                 """
-                SELECT sg.id, sg.guideline, sg.os_guideline_id, sg.software_id, sg.status, mg.module_path, sg.created_at, sg.updated_at
+                SELECT sg.id, sg.guideline, sg.software_id, sg.status, mg.module_path, sg.created_at, sg.updated_at
                 FROM software_guidelines sg
                 LEFT JOIN module_guidelines mg ON sg.id = mg.guideline_id
                 WHERE sg.id = ?;
@@ -108,15 +116,22 @@ class SQLiteSoftwareGuidelineRepository(SoftwareGuidelineRepository):
             row = cursor.fetchone()
             if not row:
                 return None
+
+            cursor.execute(
+                "SELECT os_guideline_id FROM software_guidelines_os_guidelines WHERE software_guideline_id = ? ORDER BY rowid ASC;",
+                (guideline_id,),
+            )
+            os_guideline_ids = [r[0] for r in cursor.fetchall()]
+
             return SoftwareGuidelineRecord(
                 id=row[0],
                 guideline=row[1],
-                os_guideline_id=row[2],
-                software_id=row[3],
-                status=row[4] or "UNVERIFIED",
-                path=row[5] or "",
-                created_at=row[6],
-                updated_at=row[7],
+                os_guideline_ids=os_guideline_ids,
+                software_id=row[2],
+                status=row[3] or "UNVERIFIED",
+                path=row[4] or "",
+                created_at=row[5],
+                updated_at=row[6],
             )
         except Exception as e:
             self._logger.error(
@@ -134,7 +149,7 @@ class SQLiteSoftwareGuidelineRepository(SoftwareGuidelineRepository):
             cursor = conn.cursor()
             cursor.execute(
                 """
-                SELECT sg.id, sg.guideline, sg.os_guideline_id, sg.software_id, sg.status, mg.module_path, sg.created_at, sg.updated_at
+                SELECT sg.id, sg.guideline, sg.software_id, sg.status, mg.module_path, sg.created_at, sg.updated_at
                 FROM software_guidelines sg
                 JOIN module_guidelines mg ON sg.id = mg.guideline_id
                 WHERE mg.module_path = ?
@@ -145,16 +160,22 @@ class SQLiteSoftwareGuidelineRepository(SoftwareGuidelineRepository):
             rows = cursor.fetchall()
             results = []
             for row in rows:
+                g_id = row[0]
+                cursor.execute(
+                    "SELECT os_guideline_id FROM software_guidelines_os_guidelines WHERE software_guideline_id = ? ORDER BY rowid ASC;",
+                    (g_id,),
+                )
+                os_guideline_ids = [r[0] for r in cursor.fetchall()]
                 results.append(
                     SoftwareGuidelineRecord(
                         id=row[0],
                         guideline=row[1],
-                        os_guideline_id=row[2],
-                        software_id=row[3],
-                        status=row[4] or "UNVERIFIED",
-                        path=row[5] or "",
-                        created_at=row[6],
-                        updated_at=row[7],
+                        os_guideline_ids=os_guideline_ids,
+                        software_id=row[2],
+                        status=row[3] or "UNVERIFIED",
+                        path=row[4] or "",
+                        created_at=row[5],
+                        updated_at=row[6],
                     )
                 )
             return results
@@ -174,7 +195,7 @@ class SQLiteSoftwareGuidelineRepository(SoftwareGuidelineRepository):
             cursor = conn.cursor()
             cursor.execute(
                 """
-                SELECT sg.id, sg.guideline, sg.os_guideline_id, sg.software_id, sg.status, mg.module_path, sg.created_at, sg.updated_at
+                SELECT sg.id, sg.guideline, sg.software_id, sg.status, mg.module_path, sg.created_at, sg.updated_at
                 FROM software_guidelines sg
                 LEFT JOIN module_guidelines mg ON sg.id = mg.guideline_id
                 WHERE sg.status = 'UNVERIFIED'
@@ -184,16 +205,22 @@ class SQLiteSoftwareGuidelineRepository(SoftwareGuidelineRepository):
             rows = cursor.fetchall()
             results = []
             for row in rows:
+                g_id = row[0]
+                cursor.execute(
+                    "SELECT os_guideline_id FROM software_guidelines_os_guidelines WHERE software_guideline_id = ? ORDER BY rowid ASC;",
+                    (g_id,),
+                )
+                os_guideline_ids = [r[0] for r in cursor.fetchall()]
                 results.append(
                     SoftwareGuidelineRecord(
                         id=row[0],
                         guideline=row[1],
-                        os_guideline_id=row[2],
-                        software_id=row[3],
-                        status=row[4] or "UNVERIFIED",
-                        path=row[5] or "",
-                        created_at=row[6],
-                        updated_at=row[7],
+                        os_guideline_ids=os_guideline_ids,
+                        software_id=row[2],
+                        status=row[3] or "UNVERIFIED",
+                        path=row[4] or "",
+                        created_at=row[5],
+                        updated_at=row[6],
                     )
                 )
             return results
@@ -248,7 +275,13 @@ class SQLiteSoftwareGuidelineRepository(SoftwareGuidelineRepository):
                 """
                 SELECT sg.id, sg.guideline, sg.status, ts.platform, mg.module_path, s.name, s.vulnerable_versions
                 FROM software_guidelines sg
-                LEFT JOIN os_guidelines og ON sg.os_guideline_id = og.id
+                LEFT JOIN software_guidelines_os_guidelines sg_og ON sg.id = sg_og.software_guideline_id
+                    AND sg_og.rowid = (
+                        SELECT MIN(rowid)
+                        FROM software_guidelines_os_guidelines
+                        WHERE software_guideline_id = sg.id
+                    )
+                LEFT JOIN os_guidelines og ON sg_og.os_guideline_id = og.id
                 LEFT JOIN target_systems ts ON og.target_system_id = ts.id
                 LEFT JOIN module_guidelines mg ON sg.id = mg.guideline_id
                 LEFT JOIN software s ON mg.module_path = s.path;
@@ -335,10 +368,11 @@ class SQLiteSoftwareGuidelineRepository(SoftwareGuidelineRepository):
             cursor = conn.cursor()
             cursor.execute(
                 """
-                SELECT sg.id, sg.guideline, sg.os_guideline_id, sg.software_id, sg.status, mg.module_path, sg.created_at, sg.updated_at
+                SELECT sg.id, sg.guideline, sg.software_id, sg.status, mg.module_path, sg.created_at, sg.updated_at
                 FROM software_guidelines sg
+                JOIN software_guidelines_os_guidelines sg_og ON sg.id = sg_og.software_guideline_id
                 LEFT JOIN module_guidelines mg ON sg.id = mg.guideline_id
-                WHERE sg.os_guideline_id = ?
+                WHERE sg_og.os_guideline_id = ?
                 ORDER BY sg.created_at DESC;
                 """,
                 (os_guideline_id,),
@@ -346,16 +380,22 @@ class SQLiteSoftwareGuidelineRepository(SoftwareGuidelineRepository):
             rows = cursor.fetchall()
             results = []
             for row in rows:
+                g_id = row[0]
+                cursor.execute(
+                    "SELECT os_guideline_id FROM software_guidelines_os_guidelines WHERE software_guideline_id = ? ORDER BY rowid ASC;",
+                    (g_id,),
+                )
+                os_guideline_ids = [r[0] for r in cursor.fetchall()]
                 results.append(
                     SoftwareGuidelineRecord(
                         id=row[0],
                         guideline=row[1],
-                        os_guideline_id=row[2],
-                        software_id=row[3],
-                        status=row[4] or "UNVERIFIED",
-                        path=row[5] or "",
-                        created_at=row[6],
-                        updated_at=row[7],
+                        os_guideline_ids=os_guideline_ids,
+                        software_id=row[2],
+                        status=row[3] or "UNVERIFIED",
+                        path=row[4] or "",
+                        created_at=row[5],
+                        updated_at=row[6],
                     )
                 )
             return results
@@ -378,12 +418,11 @@ class SQLiteSoftwareGuidelineRepository(SoftwareGuidelineRepository):
             cursor.execute(
                 """
                 UPDATE software_guidelines
-                SET guideline = ?, os_guideline_id = ?, software_id = ?, status = ?, updated_at = CURRENT_TIMESTAMP
+                SET guideline = ?, software_id = ?, status = ?, updated_at = CURRENT_TIMESTAMP
                 WHERE id = ?;
                 """,
                 (
                     record.guideline,
-                    record.os_guideline_id,
                     record.software_id,
                     record.status,
                     guideline_id,
@@ -391,6 +430,21 @@ class SQLiteSoftwareGuidelineRepository(SoftwareGuidelineRepository):
             )
             if cursor.rowcount == 0:
                 return None
+
+            cursor.execute(
+                "DELETE FROM software_guidelines_os_guidelines WHERE software_guideline_id = ?;",
+                (guideline_id,),
+            )
+            if record.os_guideline_ids:
+                for og_id in record.os_guideline_ids:
+                    cursor.execute(
+                        """
+                        INSERT OR IGNORE INTO software_guidelines_os_guidelines (software_guideline_id, os_guideline_id)
+                        VALUES (?, ?);
+                        """,
+                        (guideline_id, og_id),
+                    )
+
             conn.commit()
             return guideline_id
         except Exception as e:

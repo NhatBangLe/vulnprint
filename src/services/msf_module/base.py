@@ -4,8 +4,6 @@ from models import (
     MetasploitModuleDetails,
     MSFModule,
     Software,
-    SoftwareGuideline,
-    OSGuideline,
 )
 
 
@@ -83,14 +81,7 @@ class MSFModuleService(ABC):
         software_pattern: Optional[str] = None,
         platform: Optional[str] = None,
         rank: Optional[str] = None,
-    ) -> List[
-        Tuple[
-            MSFModule,
-            Optional[Software],
-            Optional[SoftwareGuideline],
-            Optional[OSGuideline],
-        ]
-    ]:
+    ) -> List[Tuple[MSFModule, Optional[Software]]]:
         """
         Searches modules and returns their details as domain models.
         """

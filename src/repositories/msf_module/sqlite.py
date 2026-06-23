@@ -6,8 +6,6 @@ from .base import MSFModuleRepository
 from models import (
     MSFModuleRecord,
     SoftwareRecord,
-    OSGuidelineRecord,
-    SoftwareGuidelineRecord,
 )
 
 
@@ -292,14 +290,7 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
         software_pattern: Optional[str] = None,
         platform: Optional[str] = None,
         rank: Optional[str] = None,
-    ) -> List[
-        Tuple[
-            MSFModuleRecord,
-            Optional[SoftwareRecord],
-            Optional[SoftwareGuidelineRecord],
-            Optional[OSGuidelineRecord],
-        ]
-    ]:
+    ) -> List[Tuple[MSFModuleRecord, Optional[SoftwareRecord]]]:
         conn = None
         try:
             conn = self.db_manager.get_connection()
@@ -324,24 +315,10 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
                     ts_s.platform AS soft_platform, 
                     ts_s.distribution AS soft_distribution, 
                     ts_s.version AS soft_version, 
-                    ts_s.architecture AS soft_architecture,
-                    sg.id AS guideline_id, 
-                    sg.guideline AS software_guideline, 
-                    sg.status,
-                    og.id AS os_guideline_id, 
-                    og.guideline AS os_guideline, 
-                    og.target_system_id AS os_target_system_id,
-                    ts_og.platform AS os_platform, 
-                    ts_og.distribution AS os_distribution, 
-                    ts_og.version AS os_version, 
-                    ts_og.architecture AS os_architecture
+                    ts_s.architecture AS soft_architecture
                 FROM msf_modules m
                 LEFT JOIN software s ON m.path = s.path
                 LEFT JOIN target_systems ts_s ON s.target_system_id = ts_s.id
-                LEFT JOIN module_guidelines mg ON m.path = mg.module_path
-                LEFT JOIN software_guidelines sg ON mg.guideline_id = sg.id
-                LEFT JOIN os_guidelines og ON sg.os_guideline_id = og.id
-                LEFT JOIN target_systems ts_og ON og.target_system_id = ts_og.id
                 WHERE 1=1
             """
             params = []
@@ -382,16 +359,6 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
                     soft_distribution,
                     soft_version,
                     soft_architecture,
-                    guideline_id,
-                    software_guideline,
-                    status,
-                    os_guideline_id,
-                    os_guideline,
-                    os_target_system_id,
-                    os_platform,
-                    os_distribution,
-                    os_version,
-                    os_architecture,
                 ) = row
 
                 m_rec = MSFModuleRecord(
@@ -424,28 +391,7 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
                         architecture=soft_architecture or "",
                     )
 
-                sg_rec = None
-                og_rec = None
-                if guideline_id:
-                    sg_rec = SoftwareGuidelineRecord(
-                        id=guideline_id,
-                        guideline=software_guideline or "",
-                        os_guideline_id=os_guideline_id,
-                        software_id=software_id,
-                        status=status or "UNVERIFIED",
-                    )
-                    og_rec = OSGuidelineRecord(
-                        id=os_guideline_id,
-                        guideline=os_guideline or "",
-                        target_system_id=os_target_system_id,
-                        platform=os_platform or "",
-                        distribution=os_distribution or "",
-                        version=os_version or "",
-                        architecture=os_architecture or "",
-                        status="VERIFIED",
-                    )
-
-                records.append((m_rec, s_rec, sg_rec, og_rec))
+                records.append((m_rec, s_rec))
             return records
         except Exception as e:
             self._logger.error(f"Error searching joined modules: {e}")
