@@ -1,12 +1,64 @@
 from utils import handle_validation_error
 import asyncio
-from typing import Optional, List
+import re
+from typing import Optional, List, Literal
 import logging
 from langchain_core.tools import BaseTool
 from langchain.agents.middleware import ToolCallLimitMiddleware
 from langchain.agents import create_agent
-from pydantic import ValidationError, BaseModel, Field
+from pydantic import ValidationError, BaseModel, Field, field_validator
 from langchain_openai import ChatOpenAI
+
+
+class OperatingSystemTarget(BaseModel):
+    os_distribution_or_edition: Literal[
+        "",
+        "windows",
+        "windows 2000",
+        "windows xp",
+        "windows vista",
+        "windows 7",
+        "windows 8",
+        "windows 8.1",
+        "windows 10",
+        "windows 11",
+        "windows server",
+        "linux",
+        "ubuntu",
+        "debian",
+        "centos",
+        "redhat",
+        "unix",
+        "aix",
+        "solaris",
+        "android",
+        "macos",
+        "ios",
+    ] = Field(
+        default="",
+        description="The target OS distribution/edition. Must be one of the specified general values (e.g. 'windows 7', 'ubuntu'), or empty if generic/unknown.",
+    )
+    os_version_or_release: str = Field(
+        default="",
+        description="The target OS version/release. MUST be strictly formatted as a string of numbers (digits and decimals/periods only, e.g., '20.04', '7.2', '10', '11'). Do not include text, words, ranges, or comparison operators.",
+    )
+    os_architecture: Literal["", "32-bit", "64-bit"] = Field(
+        default="",
+        description="The target OS CPU architecture, strictly formatted as '32-bit' or '64-bit'. Leave empty if not mentioned or generic.",
+    )
+
+    @field_validator("os_version_or_release", mode="before")
+    @classmethod
+    def validate_version_numeric(cls, v: any) -> str:
+        if not v:
+            return ""
+        if not isinstance(v, str):
+            v = str(v)
+        # Extract the first contiguous block of numbers and decimals
+        match = re.search(r"\d+(\.\d+)*", v)
+        if match:
+            return match.group(0)
+        return ""
 
 
 class VulnerabilityTarget(BaseModel):
@@ -22,18 +74,22 @@ class VulnerabilityTarget(BaseModel):
         default_factory=list,
         description="Explicit application environment flags, e.g., ['AJP connector enabled']",
     )
-    os_distribution_or_edition: Optional[str] = Field(
-        default="",
-        description="The target OS distribution/edition extracted from the exploit details, e.g., 'ubuntu', 'debian', '10', '11', 'server 2019'. Leave empty if not mentioned or generic.",
+    os_target: OperatingSystemTarget = Field(
+        ...,
+        description="The target Operating System and CPU architecture details.",
     )
-    os_version_or_release: Optional[str] = Field(
-        default="",
-        description="The target OS version/release/service pack, e.g., '20.04 lts', '22.04', 'sp1', '22h2', '1909'. Leave empty if not mentioned or generic.",
-    )
-    os_architecture: Optional[str] = Field(
-        default="",
-        description="The target OS CPU architecture, strictly formatted as '32-bit' or '64-bit'. Leave empty if not mentioned or generic.",
-    )
+
+    @property
+    def os_distribution_or_edition(self) -> str:
+        return self.os_target.os_distribution_or_edition
+
+    @property
+    def os_version_or_release(self) -> str:
+        return self.os_target.os_version_or_release
+
+    @property
+    def os_architecture(self) -> str:
+        return self.os_target.os_architecture
 
 
 class VulnerabilityTargetExtractorAgent:
@@ -96,7 +152,12 @@ class VulnerabilityTargetExtractorAgent:
                     {"messages": [{"role": "user", "content": user_content}]},
                 )
             )
-            parsed_content = result["structured_response"]
+            parsed_content = result.get("structured_response")
+            if not parsed_content:
+                self._logger.warning(
+                    f"Result keys from LLM execution: {list(result.keys())}. 'structured_response' is missing."
+                )
+                return None
 
             if not isinstance(parsed_content, VulnerabilityTarget):
                 self._logger.warning(

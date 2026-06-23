@@ -121,7 +121,12 @@ class SoftwareGuidelineGeneratorAgent:
                     {"messages": [{"role": "user", "content": user_content}]},
                 )
             )
-            parsed_content = result["structured_response"]
+            parsed_content = result.get("structured_response")
+            if not parsed_content:
+                self._logger.warning(
+                    f"Result keys from LLM execution: {list(result.keys())}. 'structured_response' is missing."
+                )
+                return None
 
             if not isinstance(parsed_content, SoftwareGuidelineGeneratorResult):
                 self._logger.warning(
