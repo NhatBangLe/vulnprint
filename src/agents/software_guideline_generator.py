@@ -14,7 +14,12 @@ from utils import handle_validation_error
 class SoftwareGuidelineGeneratorResult(BaseModel):
     software_guideline: str = Field(
         ...,
-        description="A detailed step-by-step Software Installation Guideline for installing the vulnerable target software/version on the chosen OS in markdown format.",
+        description=(
+            "A detailed step-by-step Software Installation Guideline for installing the vulnerable "
+            "target software/version on the chosen OS in markdown format."
+            "DO NOT MENTION the OS installation instructions in the guideline. "
+            "JUST PROVIDE the software installation instructions and configurations."
+        ),
     )
 
 
@@ -58,6 +63,8 @@ class SoftwareGuidelineGeneratorAgent:
                 "vulnerable packages, and configuration steps for a specific software target on a chosen Operating System. "
                 "Compile a highly practical, step-by-step Software Installation Guideline for installing and configuring the "
                 "vulnerable target software/version on the chosen OS in markdown format."
+                "DO NOT MENTION the OS installation instructions in the guideline. "
+                "JUST PROVIDE the software installation instructions and configurations."
             ),
             response_format=SoftwareGuidelineGeneratorResult,
         )
@@ -114,6 +121,8 @@ class SoftwareGuidelineGeneratorAgent:
                 f"Software Target Name: {software.name}\n"
                 f"Vulnerable Versions: {versions_str}\n"
                 f"Required Configurations: {configs_str}\n"
+                "IMPORTANT: DO NOT MENTION the OS installation instructions in the guideline. "
+                "JUST PROVIDE the software installation instructions and configurations"
             )
 
             result = asyncio.run(

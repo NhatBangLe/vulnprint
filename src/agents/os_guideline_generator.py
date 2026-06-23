@@ -14,7 +14,13 @@ from utils import handle_validation_error
 class OSGuidelineGeneratorResult(BaseModel):
     os_guideline: str = Field(
         ...,
-        description="A detailed step-by-step Operating System Installation Guideline, including VM requirements, download sources, and OS setup steps in markdown format. Crucially, this MUST NOT mention the specific Metasploit module, target software, CVEs, or software-specific details, as it will be re-used across other modules on the same platform.",
+        description=(
+            "A detailed step-by-step Operating System Installation Guideline, including VM requirements, "
+            "download sources (if available), and OS setup steps in markdown format. "
+            "Crucially, this MUST NOT mention "
+            "the specific Metasploit module, target software, CVEs, or software-specific details, "
+            "as it will be re-used across other modules on the same platform."
+        ),
     )
 
 
@@ -57,6 +63,7 @@ class OSGuidelineGeneratorAgent:
                 "Compile a highly practical Operating System installation guide (for base VM setup) in markdown format. "
                 "Crucially, the OS guideline (os_guideline) must be completely generic for the OS and platform, and MUST NOT "
                 "contain any references to the specific Metasploit module path, software name, version, or CVEs, so that it can be re-used."
+                "DO NOT MENTION the software, CVEs or any software-specific details in the guideline."
             ),
             response_format=OSGuidelineGeneratorResult,
         )
@@ -111,6 +118,7 @@ class OSGuidelineGeneratorAgent:
                 f"Target Software: {software_name}\n"
                 f"Associated CVEs: {cves_str}\n"
                 f"Vulnerable Versions: {versions_str}\n"
+                "DO NOT MENTION the software, CVEs or any software-specific details in the guideline."
             )
 
             result = asyncio.run(
