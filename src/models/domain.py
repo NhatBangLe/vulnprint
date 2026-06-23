@@ -18,7 +18,7 @@ class MSFModule(BaseModel):
     type: str = Field(..., description="Module type")
     rank: str = Field(..., description="Module rank")
     disclosure_date: str = Field(..., description="Disclosure date of the module")
-    platform: List[str] = Field(
+    platforms: List[str] = Field(
         default_factory=list, description="Platform of the module"
     )
     documentation: str = Field(default="", description="Documentation of the module")

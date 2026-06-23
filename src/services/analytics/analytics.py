@@ -254,7 +254,7 @@ class CLIAnalyticsService(AnalyticsService):
             for msf_module, software, sg, osg in search_results:
                 buf.write(f" [+] {msf_module.display_name}")
                 buf.write(f"     Exploit Path: {msf_module.path}")
-                buf.write(f"     Platform/OS:  {', '.join(msf_module.platform)}")
+                buf.write(f"     Platform/OS:  {', '.join(msf_module.platforms)}")
                 buf.write(f"     Exploit Rank: {msf_module.rank}")
                 buf.write(f"     Disclosure Date: {msf_module.disclosure_date}")
                 if software:

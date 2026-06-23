@@ -115,7 +115,7 @@ class VMGuidelineGeneratorAgent:
                 f"Description: {msf_module.description}\n"
                 f"Associated CVEs: {cves_str}\n"
                 f"Software Target: {software.name}\n"
-                f"Available target platforms: {msf_module.platform}\n"
+                f"Available target platforms: {msf_module.platforms}\n"
                 f"Vulnerable Versions: {versions_str}\n"
                 f"Required Configurations: {configs_str}\n"
             )

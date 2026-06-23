@@ -80,7 +80,7 @@ class MarkdownBlueprintService(BlueprintService):
                     f"Guideline for {msf_path} not directly found. Searching for suitable existing guideline..."
                 )
                 potential_guides = self.sw_guide_service.find_all_potential_guidelines(
-                    platform=msf_module.platform,
+                    platform=msf_module.platforms,
                     software_name=software.name,
                     vulnerable_versions=software.vulnerable_versions,
                 )
