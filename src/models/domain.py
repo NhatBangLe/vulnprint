@@ -156,7 +156,6 @@ class TargetSystem(BaseModel):
 
 class OSGuideline(BaseModel):
     id: Optional[int] = None
-    os_name: str
     guideline: str
     status: GuidelineStatus = GuidelineStatus.UNVERIFIED
     target_system_id: Optional[int] = None
@@ -164,6 +163,19 @@ class OSGuideline(BaseModel):
     distribution: str = ""
     version: str = ""
     architecture: str = ""
+
+    @property
+    def os_name(self) -> str:
+        parts = []
+        if self.distribution:
+            parts.append(self.distribution)
+        else:
+            parts.append(self.platform)
+        if self.version:
+            parts.append(self.version)
+        if self.architecture:
+            parts.append(f"({self.architecture})")
+        return " ".join(parts)
 
     @model_validator(mode="after")
     def populate_target_system_components(self) -> "OSGuideline":
