@@ -582,11 +582,6 @@ def handle_search_ingestion(
     os_guideline_generator_agent = OSGuidelineGeneratorAgent(
         msf_service=msf_service,
         soft_service=soft_service,
-        ai_base_url=settings.ai_base_url,
-        ai_api_key=settings.ai_api_key,
-        ai_model=settings.ai_model,
-        tools=tools,
-        max_tool_calls=settings.mcp_max_tool_calls,
     )
     software_guideline_generator_agent = SoftwareGuidelineGeneratorAgent(
         msf_service=msf_service,
@@ -642,7 +637,12 @@ def handle_search_ingestion(
                 f"[{idx}/{len(module_paths)}] Interrogating AI model ({settings.ai_model}) to extract software metadata..."
             )
             vuln_target = extractor.extract(
-                description=desc, documentation=module_details.documentation
+                description=desc,
+                documentation=module_details.documentation,
+                cves=module_details.cves,
+                msf_path=path,
+                msf_module_name=module_details.module_name,
+                target_platforms=module_details.platform,
             )
 
             if vuln_target is None:

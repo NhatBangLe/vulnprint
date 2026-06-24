@@ -142,7 +142,13 @@ class VulnerabilityTargetExtractorAgent:
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def extract(
-        self, description: str, documentation: str = ""
+        self,
+        description: str,
+        documentation: str = "",
+        cves: Optional[List[str]] = None,
+        msf_path: Optional[str] = None,
+        msf_module_name: Optional[str] = None,
+        target_platforms: Optional[List[str]] = None,
     ) -> Optional[VulnerabilityTarget]:
         """
         Leverages the AI model to parse exploit description and documentation text, returning validated metadata.
@@ -153,11 +159,24 @@ class VulnerabilityTargetExtractorAgent:
             return None
 
         try:
-            user_content = (
+            prompt_parts = [
                 "Here is the provided exploit information, analyze and extract the relevant information."
-                f"\nExploit Description:\n{description}"
-                f"\n\nExploit Documentation:\n{documentation}"
-            )
+            ]
+            if msf_path:
+                prompt_parts.append(f"Metasploit Path: {msf_path}")
+            if msf_module_name:
+                prompt_parts.append(f"Metasploit Module Name: {msf_module_name}")
+            if cves:
+                prompt_parts.append(f"Associated CVEs: {', '.join(cves)}")
+            if target_platforms:
+                prompt_parts.append(
+                    f"Target Platforms (You must choose only one based on the available options): {', '.join(target_platforms)}"
+                )
+
+            prompt_parts.append(f"\nExploit Description:\n{description}")
+            prompt_parts.append(f"\nExploit Documentation:\n{documentation}")
+
+            user_content = "\n".join(prompt_parts)
             result = asyncio.run(
                 self.agent.ainvoke(
                     {"messages": [{"role": "user", "content": user_content}]},
