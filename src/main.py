@@ -641,11 +641,11 @@ def handle_search_ingestion(
             logger.info(
                 f"[{idx}/{len(module_paths)}] Interrogating AI model ({settings.ai_model}) to extract software metadata..."
             )
-            slm_data = extractor.extract(
+            vuln_target = extractor.extract(
                 description=desc, documentation=module_details.documentation
             )
 
-            if slm_data is None:
+            if vuln_target is None:
                 logger.warning(
                     f"[{idx}/{len(module_paths)}] Failed to extract software metadata. Skipping..."
                 )
@@ -654,46 +654,19 @@ def handle_search_ingestion(
         logger.info(
             f"[{idx}/{len(module_paths)}] Recording intelligence in database ledger..."
         )
-        # Extract and normalize platform for the target system
-        platform_str = ""
-        if module_details.platform:
-            for p in module_details.platform:
-                p_clean = p.lower().strip()
-                if p_clean in ["win", "windows"]:
-                    platform_str = "windows"
-                    break
-                elif p_clean in ["linux"]:
-                    platform_str = "linux"
-                    break
-                elif p_clean in ["osx", "darwin"]:
-                    platform_str = "osx"
-                    break
-                elif p_clean in ["solaris", "netware", "android", "ios", "unix"]:
-                    platform_str = p_clean
-                    break
-            if not platform_str:
-                platform_str = module_details.platform[0].lower().strip()
-
-        arch_str = ""
-        if slm_data.os_architecture:
-            arch_clean = slm_data.os_architecture.lower().strip()
-            if "32" in arch_clean:
-                arch_str = "32-bit"
-            elif "64" in arch_clean:
-                arch_str = "64-bit"
 
         msf_service.store_module(module_details)
         soft_service.store_software(
             Software(
                 path=path,
                 cves=module_details.cves,
-                vulnerable_versions=slm_data.vulnerable_versions,
-                required_configs=slm_data.required_configs,
-                name=slm_data.software_name,
-                platform=platform_str,
-                distribution=slm_data.os_distribution_or_edition or "",
-                version=slm_data.os_version_or_release or "",
-                architecture=arch_str,
+                vulnerable_versions=vuln_target.vulnerable_versions,
+                required_configs=vuln_target.required_configs,
+                name=vuln_target.software_name,
+                platform=vuln_target.platform,
+                distribution=vuln_target.os_distribution_or_edition,
+                version=vuln_target.os_version_or_release,
+                architecture=vuln_target.os_architecture,
             )
         )
 

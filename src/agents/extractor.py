@@ -11,9 +11,21 @@ from langchain_openai import ChatOpenAI
 
 
 class OperatingSystemTarget(BaseModel):
+    platform: Literal[
+        "windows",
+        "linux",
+        "osx",
+        "macos",
+        "solaris",
+        "netware",
+        "android",
+        "ios",
+        "unix",
+    ] = Field(
+        description="The target OS platform. Must be one of the specified general values (e.g. 'windows', 'linux').",
+    )
     os_distribution_or_edition: Literal[
         "",
-        "windows",
         "windows 2000",
         "windows xp",
         "windows vista",
@@ -28,12 +40,7 @@ class OperatingSystemTarget(BaseModel):
         "debian",
         "centos",
         "redhat",
-        "unix",
         "aix",
-        "solaris",
-        "android",
-        "macos",
-        "ios",
     ] = Field(
         default="",
         description="The target OS distribution/edition. Must be one of the specified general values (e.g. 'windows 7', 'ubuntu'), or empty if generic/unknown.",
@@ -78,6 +85,10 @@ class VulnerabilityTarget(BaseModel):
         ...,
         description="The target Operating System and CPU architecture details.",
     )
+
+    @property
+    def platform(self) -> str:
+        return self.os_target.platform
 
     @property
     def os_distribution_or_edition(self) -> str:
