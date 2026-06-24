@@ -7,7 +7,7 @@ from services import (
     SoftwareGuidelineService,
     OSGuidelineService,
 )
-from utils import OutputBuffer
+from utils import OutputBuffer, safe_print
 
 
 class CLIAnalyticsService(AnalyticsService):
@@ -38,6 +38,7 @@ class CLIAnalyticsService(AnalyticsService):
         Outputs a beautiful CLI ASCII dashboard of the Top 10 software targets.
         """
         try:
+            print = safe_print
             total_count = self.msf_service.get_total_count()
 
             print("\n" + "=" * 70)
@@ -54,19 +55,35 @@ class CLIAnalyticsService(AnalyticsService):
             # Query Top 10 technologies from SoftwareService
             top_techs = self.soft_service.get_top_software(limit=10)
 
+            # Get software guidelines mapping to software names to display their Guide IDs
+            stats = self.sw_guide_service.get_guideline_coverage_stats()
+            sw_to_guide_ids = {}
+            for item in stats.guidelines:
+                sw_to_guide_ids.setdefault(item.software_name, []).append(
+                    item.guideline_id
+                )
+
             # Header for the table
-            print(f"{'Rank':<6}{'Software Target':<36}{'Count':<10}{'Percentage':<10}")
+            print(
+                f"{'Rank':<6}{'Guide IDs':<12}{'Software Target':<30}{'Count':<8}{'Percentage':<10}"
+            )
             print("-" * 70)
 
             for idx, (software_name, count) in enumerate(top_techs, 1):
                 percentage = (count / total_count) * 100
                 percentage_str = f"{percentage:.1f}%"
+                guide_ids = sw_to_guide_ids.get(software_name, [])
+                guide_str = (
+                    ", ".join(str(gid) for gid in guide_ids) if guide_ids else "-"
+                )
                 display_name = (
-                    software_name[:34] + ".."
-                    if len(software_name) > 34
+                    software_name[:28] + ".."
+                    if len(software_name) > 28
                     else software_name
                 )
-                print(f"{idx:<6}{display_name:<36}{count:<10}{percentage_str:<10}")
+                print(
+                    f"{idx:<6}{guide_str:<12}{display_name:<30}{count:<8}{percentage_str:<10}"
+                )
 
             print("=" * 70 + "\n")
 
@@ -282,8 +299,21 @@ class CLIAnalyticsService(AnalyticsService):
                 buf.save()
                 return
 
+            # Get guideline coverage stats to map software names to guideline IDs
+            stats = self.sw_guide_service.get_guideline_coverage_stats()
+            sw_to_guide_ids = {}
+            for item in stats.guidelines:
+                sw_to_guide_ids.setdefault(item.software_name, []).append(
+                    item.guideline_id
+                )
+
             for idx, name in enumerate(software_list, 1):
-                buf.write(f"  {idx:>3}. {name}")
+                guide_ids = sw_to_guide_ids.get(name, [])
+                if guide_ids:
+                    guide_str = ", ".join(str(gid) for gid in guide_ids)
+                    buf.write(f"  {idx:>3}. {name} (Software Guide IDs: {guide_str})")
+                else:
+                    buf.write(f"  {idx:>3}. {name}")
 
             buf.write("=" * 70)
             buf.save()
@@ -343,6 +373,20 @@ class CLIAnalyticsService(AnalyticsService):
                     buf.write(
                         f"     Versions:     {', '.join(software.vulnerable_versions)}"
                     )
+
+                # Retrieve and display associated guideline IDs for tracking/exporting
+                sw_guides = self.sw_guide_service.get_software_guidelines_by_path(
+                    msf_module.path
+                )
+                if sw_guides:
+                    sw_ids_str = ", ".join(str(g.id) for g in sw_guides)
+                    buf.write(f"     Software Guide ID: {sw_ids_str}")
+                    os_ids = sorted(
+                        list(set(oid for g in sw_guides for oid in g.os_guideline_ids))
+                    )
+                    if os_ids:
+                        os_ids_str = ", ".join(str(oid) for oid in os_ids)
+                        buf.write(f"     OS Guide ID:       {os_ids_str}")
                 buf.write("")
 
             buf.write("=" * 70)
