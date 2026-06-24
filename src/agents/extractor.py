@@ -45,25 +45,12 @@ class OperatingSystemTarget(BaseModel):
     )
     os_version_or_release: str = Field(
         default="",
-        description="The target OS version/release. MUST be strictly formatted as a string of numbers (digits and decimals/periods only, e.g., '20.04', '7.2', '10', '11'). Do not include text, words, ranges, or comparison operators.",
+        description="The target OS version/release. MUST be strictly formatted as a specific version string. Do not include any other text.",
     )
     os_architecture: Literal["", "32-bit", "64-bit"] = Field(
         default="",
         description="The target OS CPU architecture, strictly formatted as '32-bit' or '64-bit'. Leave empty if not mentioned or generic.",
     )
-
-    @field_validator("os_version_or_release", mode="before")
-    @classmethod
-    def validate_version_numeric(cls, v: any) -> str:
-        if not v:
-            return ""
-        if not isinstance(v, str):
-            v = str(v)
-        # Extract the first contiguous block of numbers and decimals
-        match = re.search(r"\d+(\.\d+)*", v)
-        if match:
-            return match.group(0)
-        return ""
 
 
 class VulnerabilityTarget(BaseModel):
