@@ -1,3 +1,6 @@
+from typing import Literal
+from typing import Dict, List, Optional
+import json
 from pymetasploit3.msfrpc import ExploitModule
 from pymetasploit3.msfrpc import ModuleManager
 from pymetasploit3.msfrpc import MsfConsole
@@ -6,7 +9,6 @@ import re
 import time
 import logging
 from pymetasploit3.msfrpc import MsfRpcClient
-from typing import List
 from .base import MetasploitService
 from models import MetasploitModuleDetails
 
@@ -38,7 +40,13 @@ class MetasploitRPCService(MetasploitService):
             )
             raise
 
-    def search_modules(self, search_string: str) -> List[str]:
+    def search_modules(
+        self,
+        search_string: str,
+        min_date: Optional[str] = None,
+        max_date: Optional[str] = None,
+        sort_by_date: Optional[Literal["asc", "desc"]] = None,
+    ) -> List[str]:
         """
         Queries Metasploit's console for exploits matching the search_string
         and parses out the module paths.
@@ -46,45 +54,54 @@ class MetasploitRPCService(MetasploitService):
         if not self.client:
             raise RuntimeError("Client is not connected. Call connect() first.")
 
-        console_manager: ConsoleManager = self.client.consoles
-        console: MsfConsole | None = None
+        module_manager: ModuleManager = self.client.modules
         try:
-            # Spawn an active virtual console session
-            console: MsfConsole = console_manager.console()
+            modules: List[Dict[str, str]] = module_manager.search(search_string)
 
-            # Send precise CLI search directive
-            command = f"search {search_string}\n"
-            console.write(command)
+            # Filter by disclosuredate (YYYY-MM-DD)
+            if min_date or max_date:
+                filtered_modules = []
+                for module in modules:
+                    disc_date = module.get("disclosuredate", "")
+                    if not disc_date:
+                        continue
+                    disc_date = disc_date.strip()
+                    if min_date and disc_date < min_date:
+                        continue
+                    if max_date and disc_date > max_date:
+                        continue
+                    filtered_modules.append(module)
+                modules = filtered_modules
 
-            # Pause explicitly for the buffer to fill
-            time.sleep(2)
+            # Sort by disclosuredate
+            if sort_by_date:
+                reverse = sort_by_date == "desc"
+                # Place empty/missing dates last for both asc and desc sorts
+                modules.sort(
+                    key=lambda x: (
+                        (
+                            (1 if (x.get("disclosuredate") or "").strip() else 0),
+                            (x.get("disclosuredate") or "").strip(),
+                        )
+                        if reverse
+                        else (
+                            (0 if (x.get("disclosuredate") or "").strip() else 1),
+                            (x.get("disclosuredate") or "").strip(),
+                        )
+                    ),
+                    reverse=reverse,
+                )
 
-            # Read the raw console output string
-            output_data = console.read()  # dict_keys(['data', 'prompt', 'busy'])
-            raw_output = (
-                output_data.get("data", "")
-                if isinstance(output_data, dict)
-                else str(output_data)
-            )
-
-            # Parse module paths using regex
-            module_paths = re.findall(r"(exploit/[\w/_-]+)", raw_output)
-
-            # Ensure unique paths sorted alphabetically
-            return sorted(list(set(module_paths)))
-
+            module_paths: List[str] = []
+            for module in modules:
+                fullname: str = module.get("fullname", "")
+                if not fullname:
+                    continue
+                module_paths.append(fullname)
+            return module_paths
         except Exception as e:
             self._logger.error(f"Error executing Metasploit query: {e}")
             return []
-        finally:
-            # Destroy console session to avoid session leaks
-            if console is not None:
-                try:
-                    console.destroy()
-                except Exception as destroy_error:
-                    self._logger.warning(
-                        f"Failed to destroy console session {str(console.cid)}: {destroy_error}"
-                    )
 
     def get_module_details(self, module_path: str) -> MetasploitModuleDetails:
         """

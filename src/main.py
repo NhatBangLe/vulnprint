@@ -36,6 +36,19 @@ from config import settings
 from utils import configure_logging, safe_print
 
 
+def validate_date_format(date_str: str) -> str:
+    """
+    Validates that a date string is in the format YYYY-MM-DD.
+    """
+    import re
+
+    if not re.match(r"^\d{4}-\d{2}-\d{2}$", date_str):
+        raise argparse.ArgumentTypeError(
+            f"Invalid date format: '{date_str}'. Expected YYYY-MM-DD."
+        )
+    return date_str
+
+
 def parse_args() -> CLIArguments:
     parser = argparse.ArgumentParser(
         description="Vulnprint - Vulnerability Intelligence & Lab Blueprint Engine",
@@ -131,6 +144,22 @@ examples:
         type=int,
         help="Cap the maximum number of Metasploit modules to ingest and parse per search",
     )
+    parser.add_argument(
+        "--min-date",
+        type=validate_date_format,
+        help="Filter search results by minimum disclosure date (YYYY-MM-DD)",
+    )
+    parser.add_argument(
+        "--max-date",
+        type=validate_date_format,
+        help="Filter search results by maximum disclosure date (YYYY-MM-DD)",
+    )
+    parser.add_argument(
+        "--sort-date",
+        type=str,
+        choices=["asc", "desc"],
+        help="Sort search results by disclosure date ('asc' or 'desc')",
+    )
 
     args = parser.parse_args()
     return CLIArguments(
@@ -146,6 +175,9 @@ examples:
         review=args.review,
         export_guide=args.export_guide,
         export_guideline_by_os=args.export_guideline_by_os,
+        min_date=args.min_date,
+        max_date=args.max_date,
+        sort_date=args.sort_date,
     )
 
 
@@ -606,11 +638,14 @@ def handle_search_ingestion(
     )
 
     logger.info(f"Executing search query: '{args.search}'")
-    module_paths = metasploit_service.search_modules(args.search)
+    module_paths = metasploit_service.search_modules(
+        args.search,
+        min_date=args.min_date,
+        max_date=args.max_date,
+        sort_by_date=args.sort_date,
+    )
     if not module_paths:
-        logger.warning(
-            "No exploit modules matched the search query or buffer read failed."
-        )
+        logger.warning("No exploit modules matched the search query.")
         return
     logger.info(f"Found {len(module_paths)} matching exploit modules.")
 

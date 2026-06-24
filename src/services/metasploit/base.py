@@ -1,10 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import List
-
-try:
-    from src.models import MetasploitModuleDetails
-except ImportError:
-    from models import MetasploitModuleDetails
+from typing import List, Optional
+from models import MetasploitModuleDetails
 
 
 class MetasploitService(ABC):
@@ -20,7 +16,13 @@ class MetasploitService(ABC):
         pass
 
     @abstractmethod
-    def search_modules(self, search_string: str) -> List[str]:
+    def search_modules(
+        self,
+        search_string: str,
+        min_date: Optional[str] = None,
+        max_date: Optional[str] = None,
+        sort_by_date: Optional[str] = None,
+    ) -> List[str]:
         """
         Queries Metasploit's module database for exploits matching the search_string.
         """
