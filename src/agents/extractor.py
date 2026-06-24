@@ -1,5 +1,4 @@
 from utils import handle_validation_error
-import asyncio
 import re
 from typing import Optional, List, Literal
 import logging
@@ -7,7 +6,7 @@ from langchain_core.tools import BaseTool
 from langchain.agents.middleware import ToolCallLimitMiddleware
 from langchain.agents import create_agent
 from pydantic import ValidationError, BaseModel, Field, field_validator
-from langchain_openai import ChatOpenAI
+from langchain_openrouter import ChatOpenRouter
 
 
 class OperatingSystemTarget(BaseModel):
@@ -35,7 +34,6 @@ class OperatingSystemTarget(BaseModel):
         "windows 10",
         "windows 11",
         "windows server",
-        "linux",
         "ubuntu",
         "debian",
         "centos",
@@ -123,7 +121,7 @@ class VulnerabilityTargetExtractorAgent:
 
         self.agent = create_agent(
             name="Vulnerability Target Extractor Agent",
-            model=ChatOpenAI(
+            model=ChatOpenRouter(
                 base_url=self.ai_base_url,
                 api_key=self.ai_api_key,
                 model=self.ai_model,
@@ -141,7 +139,7 @@ class VulnerabilityTargetExtractorAgent:
         )
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def extract(
+    async def extract(
         self,
         description: str,
         documentation: str = "",
@@ -177,10 +175,8 @@ class VulnerabilityTargetExtractorAgent:
             prompt_parts.append(f"\nExploit Documentation:\n{documentation}")
 
             user_content = "\n".join(prompt_parts)
-            result = asyncio.run(
-                self.agent.ainvoke(
-                    {"messages": [{"role": "user", "content": user_content}]},
-                )
+            result = await self.agent.ainvoke(
+                {"messages": [{"role": "user", "content": user_content}]},
             )
             parsed_content = result.get("structured_response")
             if not parsed_content:

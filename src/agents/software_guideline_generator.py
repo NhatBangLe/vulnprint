@@ -1,9 +1,8 @@
 import logging
-import asyncio
 from typing import Optional, List
 from pydantic import BaseModel, Field, ValidationError
 from langchain_core.tools import BaseTool
-from langchain_openai import ChatOpenAI
+from langchain_openrouter import ChatOpenRouter
 from langchain.agents import create_agent
 from langchain.agents.middleware import ToolCallLimitMiddleware
 from services import MSFModuleService, SoftwareService, OSGuidelineService
@@ -49,7 +48,7 @@ class SoftwareGuidelineGeneratorAgent:
 
         self.agent = create_agent(
             name="Software Guideline Generator Agent",
-            model=ChatOpenAI(
+            model=ChatOpenRouter(
                 base_url=self.ai_base_url,
                 api_key=self.ai_api_key,
                 model=self.ai_model,
@@ -70,7 +69,7 @@ class SoftwareGuidelineGeneratorAgent:
         )
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def generate(
+    async def generate(
         self, msf_path: str, os_guideline_id: int
     ) -> Optional[SoftwareGuideline]:
         """
@@ -125,10 +124,8 @@ class SoftwareGuidelineGeneratorAgent:
                 "JUST PROVIDE the software installation instructions and configurations"
             )
 
-            result = asyncio.run(
-                self.agent.ainvoke(
-                    {"messages": [{"role": "user", "content": user_content}]},
-                )
+            result = await self.agent.ainvoke(
+                {"messages": [{"role": "user", "content": user_content}]},
             )
             parsed_content = result.get("structured_response")
             if not parsed_content:

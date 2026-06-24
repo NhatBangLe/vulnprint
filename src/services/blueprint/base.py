@@ -8,7 +8,7 @@ class BlueprintService(ABC):
     """
 
     @abstractmethod
-    def generate_blueprint(self, msf_path: str) -> Optional[str]:
+    async def generate_blueprint(self, msf_path: str) -> Optional[str]:
         """
         Generates a blueprint manual for the given Metasploit path.
         Returns the absolute/relative filepath to the generated manual, or None.

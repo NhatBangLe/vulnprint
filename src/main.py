@@ -564,7 +564,7 @@ def handle_analytics_mode(
         )
 
 
-def handle_search_ingestion(
+async def handle_search_ingestion(
     args: CLIArguments,
     msf_service: MSFModuleService,
     soft_service: SoftwareService,
@@ -595,16 +595,14 @@ def handle_search_ingestion(
 
     # Initialize agents
     logger.info("Initializing AI agents...")
-    tools = asyncio.run(
-        MultiServerMCPClient(
-            {
-                "mcp_search": {
-                    "transport": "http",
-                    "url": settings.mcp_search_url,
-                }
+    tools = await MultiServerMCPClient(
+        {
+            "mcp_search": {
+                "transport": "http",
+                "url": settings.mcp_search_url,
             }
-        ).get_tools()
-    )
+        }
+    ).get_tools()
     extractor = VulnerabilityTargetExtractorAgent(
         tools=tools,
         ai_base_url=settings.ai_base_url,
@@ -671,7 +669,7 @@ def handle_search_ingestion(
             logger.info(
                 f"[{idx}/{len(module_paths)}] Interrogating AI model ({settings.ai_model}) to extract software metadata..."
             )
-            vuln_target = extractor.extract(
+            vuln_target = await extractor.extract(
                 description=desc,
                 documentation=module_details.documentation,
                 cves=module_details.cves,
@@ -706,7 +704,7 @@ def handle_search_ingestion(
         )
 
         # Generate Markdown Lab Blueprint Manual
-        blueprint_file = blueprint_service.generate_blueprint(path)
+        blueprint_file = await blueprint_service.generate_blueprint(path)
         if blueprint_file:
             logger.info(
                 f"[{idx}/{len(module_paths)}] Saved Lab Blueprint Manual to: {blueprint_file}"
@@ -773,13 +771,15 @@ def main():
                 args, msf_service, soft_service, sw_guide_service, os_guide_service
             )
     elif args.search:
-        handle_search_ingestion(
-            args=args,
-            msf_service=msf_service,
-            soft_service=soft_service,
-            os_guide_service=os_guide_service,
-            sw_guide_service=sw_guide_service,
-            logger=logger,
+        asyncio.run(
+            handle_search_ingestion(
+                args=args,
+                msf_service=msf_service,
+                soft_service=soft_service,
+                os_guide_service=os_guide_service,
+                sw_guide_service=sw_guide_service,
+                logger=logger,
+            )
         )
 
 

@@ -15,10 +15,10 @@ class Settings(BaseSettings):
     msf_rpc_password: Optional[str] = Field(None, validation_alias="MSF_RPC_PASSWORD")
 
     ai_base_url: str = Field(
-        "http://localhost:11434/v1", validation_alias="AI_BASE_URL"
+        "https://openrouter.ai/api/v1", validation_alias="AI_BASE_URL"
     )
-    ai_model: str = Field("llama3", validation_alias="AI_MODEL")
-    ai_api_key: str = Field("local-engine", validation_alias="AI_API_KEY")
+    ai_model: str = Field(validation_alias="AI_MODEL")
+    ai_api_key: Optional[str] = Field(None, validation_alias="AI_API_KEY")
 
     blueprints_dir: str = Field(
         "vulnprint_blueprints", validation_alias="BLUEPRINTS_DIR"

@@ -39,7 +39,7 @@ class MarkdownBlueprintService(BlueprintService):
         self.software_guideline_generator_agent = software_guideline_generator_agent
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def generate_blueprint(self, msf_path: str) -> Optional[str]:
+    async def generate_blueprint(self, msf_path: str) -> Optional[str]:
         try:
             msf_module = self.msf_service.get_module_by_path(msf_path)
             if not msf_module:
@@ -127,7 +127,7 @@ class MarkdownBlueprintService(BlueprintService):
                     self._logger.info(
                         f"Re-using OS guideline ID {os_guideline_id} ({os_guide.os_name}). Generating software guideline..."
                     )
-                    sw_guide = self.software_guideline_generator_agent.generate(
+                    sw_guide = await self.software_guideline_generator_agent.generate(
                         msf_path, os_guideline_id
                     )
                     if sw_guide:
@@ -172,7 +172,7 @@ class MarkdownBlueprintService(BlueprintService):
                             )
 
                         # 2. Generate software guideline using the new OS guideline ID
-                        sw_guide = self.software_guideline_generator_agent.generate(
+                        sw_guide = await self.software_guideline_generator_agent.generate(
                             msf_path, os_guideline_id
                         )
                         if sw_guide:
