@@ -5,7 +5,7 @@ import logging
 from langchain_core.tools import BaseTool
 from langchain.agents.middleware import ToolCallLimitMiddleware
 from langchain.agents import create_agent
-from pydantic import ValidationError, BaseModel, Field, field_validator
+from pydantic import ValidationError, BaseModel, Field
 from langchain_openrouter import ChatOpenRouter
 
 
@@ -21,7 +21,7 @@ class OperatingSystemTarget(BaseModel):
         "ios",
         "unix",
     ] = Field(
-        description="The target OS platform. Must be one of the specified general values (e.g. 'windows', 'linux').",
+        description="The target OS platform. MUST be one of the specified general values (e.g. 'windows', 'linux').",
     )
     os_distribution_or_edition: Literal[
         "",
@@ -41,11 +41,12 @@ class OperatingSystemTarget(BaseModel):
         "aix",
     ] = Field(
         default="",
-        description="The target OS distribution/edition. Must be one of the specified general values (e.g. 'windows 7', 'ubuntu'), or empty if generic/unknown.",
+        description="The target OS distribution/edition. MUST be one of the specified general values (e.g. 'windows 7', 'ubuntu'), or empty if generic/unknown.",
     )
     os_version_or_release: str = Field(
         default="",
-        description="The target OS version/release. MUST be strictly formatted as a specific version string. Do not include any other text.",
+        description="The target OS version/release. MUST be strictly formatted as a single specific version and optional build (e.g., '10.0', '10.0.19041', '10.0 build 17763', '22h2 build 19045', '20.04'). Do not include distribution/edition name, comments, version ranges, alternative versions (do not use 'or', 'and', or commas), or other text.",
+        pattern=r"^(?:[vV]?\d+[a-zA-Z0-9.]*(?:\s+[Bb]uild\s+[a-zA-Z0-9.-]+)?|)$",
     )
     os_architecture: Literal["", "32-bit", "64-bit"] = Field(
         default="",
@@ -120,7 +121,8 @@ class VulnerabilityTargetExtractorAgent:
                 "You are an expert open-source cyber threat intelligence extractor. "
                 "Analyze the given exploit text block. Extract the primary software package target name, "
                 "its explicit vulnerable version identifiers, specific environment rules, and target Operating System "
-                "specifications (distribution/edition, version/release name, architecture) if specified."
+                "specifications (platform, distribution/edition, version/release name, architecture). "
+                "If multiple target Operating System versions/releases are mentioned, you MUST pick only one (the primary or most specific one)."
             ),
             response_format=VulnerabilityTarget,
         )
@@ -155,7 +157,7 @@ class VulnerabilityTargetExtractorAgent:
                 prompt_parts.append(f"Associated CVEs: {', '.join(cves)}")
             if target_platforms:
                 prompt_parts.append(
-                    f"Target Platforms (You must choose only one based on the available options): {', '.join(target_platforms)}"
+                    f"Target Platforms (You MUST choose ONLY ONE based on the available options): {', '.join(target_platforms)}"
                 )
 
             prompt_parts.append(f"\nExploit Description:\n{description}")
