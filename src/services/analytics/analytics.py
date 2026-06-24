@@ -89,7 +89,7 @@ class CLIAnalyticsService(AnalyticsService):
                 print("=" * 70 + "\n")
             else:
                 print(
-                    f"{'Rank':<6}{'OS Guideline Setup':<36}{'SW Covered':<12}{'Percentage':<10}"
+                    f"{'Rank':<6}{'Guide ID':<10}{'OS Guideline Setup':<30}{'SW Covered':<12}{'Percentage':<10}"
                 )
                 print("-" * 70)
                 for idx, item in enumerate(os_stats.guidelines, 1):
@@ -100,12 +100,12 @@ class CLIAnalyticsService(AnalyticsService):
                     )
                     percentage_str = f"{percentage:.1f}%"
                     display_name = (
-                        item.os_name[:34] + ".."
-                        if len(item.os_name) > 34
+                        item.os_name[:28] + ".."
+                        if len(item.os_name) > 28
                         else item.os_name
                     )
                     print(
-                        f"{idx:<6}{display_name:<36}{item.coverage_count:<12}{percentage_str:<10}"
+                        f"{idx:<6}{item.guideline_id:<10}{display_name:<30}{item.coverage_count:<12}{percentage_str:<10}"
                     )
                 print("=" * 70 + "\n")
 
@@ -239,7 +239,7 @@ class CLIAnalyticsService(AnalyticsService):
             buf.write("-" * 70)
             if os_stats.total_os_guidelines > 0:
                 buf.write(
-                    f" {'Rank':<6}{'OS Guideline Setup':<30}{'SW Covered':<12}{'Percentage':<12}{'Bar Chart'}"
+                    f" {'Rank':<6}{'Guide ID':<10}{'OS Guideline Setup':<20}{'SW Covered':<12}{'Percentage':<12}{'Bar Chart'}"
                 )
                 buf.write("-" * 70)
                 for idx, item in enumerate(os_stats.guidelines, 1):
@@ -251,12 +251,12 @@ class CLIAnalyticsService(AnalyticsService):
                     pct_str = f"{pct:.1f}%"
                     bar = self._generate_bar(pct)
                     display_name = (
-                        item.os_name[:28] + ".."
-                        if len(item.os_name) > 28
+                        item.os_name[:18] + ".."
+                        if len(item.os_name) > 18
                         else item.os_name
                     )
                     buf.write(
-                        f" {idx:<5}{display_name:<30}{item.coverage_count:<12}{pct_str:<12}{bar}"
+                        f" {idx:<5}{item.guideline_id:<10}{display_name:<20}{item.coverage_count:<12}{pct_str:<12}{bar}"
                     )
                 buf.write("=" * 70)
 
