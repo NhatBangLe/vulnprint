@@ -193,24 +193,24 @@ class CLIAnalyticsService(AnalyticsService):
             buf.write("=" * 70)
 
             # Panel 4: Common Required Configurations
-            configs = self.soft_service.get_required_configurations()
-            if configs:
-                from collections import Counter
+            # configs = self.soft_service.get_required_configurations()
+            # if configs:
+            #     from collections import Counter
 
-                config_counts = Counter(configs).most_common(5)
-                buf.write("\n" + "=" * 70)
-                buf.write(f"{'COMMON LAB CONFIGURATION FLAGS':^70}")
-                buf.write("=" * 70)
-                buf.write(f" {'Configuration Requirement':<55}{'Occurrences':<10}")
-                buf.write("-" * 70)
-                for idx, (config_name, count) in enumerate(config_counts, 1):
-                    display_config = (
-                        config_name[:52] + ".."
-                        if len(config_name) > 52
-                        else config_name
-                    )
-                    buf.write(f" {idx}. {display_config:<51}{count:<10}")
-                buf.write("=" * 70)
+            #     config_counts = Counter(configs).most_common(5)
+            #     buf.write("\n" + "=" * 70)
+            #     buf.write(f"{'COMMON LAB CONFIGURATION FLAGS':^70}")
+            #     buf.write("=" * 70)
+            #     buf.write(f" {'Configuration Requirement':<55}{'Occurrences':<10}")
+            #     buf.write("-" * 70)
+            #     for idx, (config_name, count) in enumerate(config_counts, 1):
+            #         display_config = (
+            #             config_name[:52] + ".."
+            #             if len(config_name) > 52
+            #             else config_name
+            #         )
+            #         buf.write(f" {idx}. {display_config:<51}{count:<10}")
+            #     buf.write("=" * 70)
 
             # Panel 5: Software Guideline Coverage & Consolidation
             stats = self.sw_guide_service.get_guideline_coverage_stats()

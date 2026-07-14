@@ -219,7 +219,6 @@ def handle_review_mode(
     os_guide_service: OSGuidelineService,
     sw_guide_service: SoftwareGuidelineService,
     soft_service: SoftwareService,
-    msf_service: MSFModuleService,
     logger: logging.Logger,
 ) -> None:
     unverified_guidelines = sw_guide_service.get_unverified_guidelines()
@@ -746,9 +745,7 @@ def main():
         or args.export_guideline_by_os
     ):
         if args.review:
-            handle_review_mode(
-                os_guide_service, sw_guide_service, soft_service, msf_service, logger
-            )
+            handle_review_mode(os_guide_service, sw_guide_service, soft_service, logger)
         elif args.export_guide:
             handle_export_guide_mode(
                 os_guide_service=os_guide_service,
