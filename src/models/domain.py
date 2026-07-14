@@ -299,3 +299,21 @@ class OSGuidelineCoverageStats(BaseModel):
     total_os_guidelines: int
     average_coverage: float
     guidelines: List[OSGuidelineCoverageItem] = Field(default_factory=list)
+
+
+class MinimalVMGuidelineItem(BaseModel):
+    os_guideline_id: int
+    os_name: str
+    os_guideline_status: str
+    software_guidelines_count: int
+    msf_modules_covered_count: int
+    msf_modules_coverage_percentage: float
+    msf_modules_covered: List[str]
+
+
+class MinimalVMGuidelinesCoverage(BaseModel):
+    total_msf_modules_in_db: int
+    total_coverable_msf_modules: int
+    minimal_os_guidelines_count: int
+    os_guidelines: List[MinimalVMGuidelineItem]
+

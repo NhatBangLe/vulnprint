@@ -11,6 +11,8 @@ from .domain import (
     MSFModule,
     Software,
     TargetSystem,
+    MinimalVMGuidelineItem,
+    MinimalVMGuidelinesCoverage,
 )
 from .records import (
     MSFModuleRecord,
@@ -40,4 +42,6 @@ __all__ = [
     "MSFModule",
     "Software",
     "TargetSystem",
+    "MinimalVMGuidelineItem",
+    "MinimalVMGuidelinesCoverage",
 ]

@@ -6,6 +6,7 @@ from services import (
     SoftwareService,
     SoftwareGuidelineService,
     OSGuidelineService,
+    VMGuidelineService,
 )
 from utils import OutputBuffer, safe_print
 
@@ -21,11 +22,13 @@ class CLIAnalyticsService(AnalyticsService):
         soft_service: SoftwareService,
         sw_guide_service: SoftwareGuidelineService,
         os_guide_service: OSGuidelineService,
+        vm_guide_service: VMGuidelineService,
     ):
         self.msf_service = msf_service
         self.soft_service = soft_service
         self.sw_guide_service = sw_guide_service
         self.os_guide_service = os_guide_service
+        self.vm_guide_service = vm_guide_service
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def _generate_bar(self, percentage: float, max_bar_length: int = 25) -> str:
@@ -213,33 +216,33 @@ class CLIAnalyticsService(AnalyticsService):
             #     buf.write("=" * 70)
 
             # Panel 5: Software Guideline Coverage & Consolidation
-            stats = self.sw_guide_service.get_guideline_coverage_stats()
-            buf.write("\n" + "=" * 70)
-            buf.write(f"{'SOFTWARE GUIDELINE COVERAGE & CONSOLIDATION':^70}")
-            buf.write("=" * 70)
-            buf.write(f" Total Unique Software Guidelines: {stats.total_guidelines}")
-            buf.write(
-                f" Average Module Coverage per Software Guideline: {stats.average_coverage:.2f}"
-            )
-            buf.write("-" * 70)
-            if stats.total_guidelines > 0:
-                buf.write(
-                    f" {'Guide ID':<10}{'Target Software Product':<36}{'Status':<14}{'MSF Covered'}"
-                )
-                buf.write("-" * 70)
-                for item in stats.guidelines:
-                    display_software = (
-                        item.software_name[:34] + ".."
-                        if len(item.software_name) > 34
-                        else item.software_name
-                    )
-                    buf.write(
-                        f" {item.guideline_id:<10}"
-                        f"{display_software:<36}"
-                        f"{item.status:<14}"
-                        f"{item.coverage_count}"
-                    )
-                buf.write("=" * 70)
+            # stats = self.sw_guide_service.get_guideline_coverage_stats()
+            # buf.write("\n" + "=" * 70)
+            # buf.write(f"{'SOFTWARE GUIDELINE COVERAGE & CONSOLIDATION':^70}")
+            # buf.write("=" * 70)
+            # buf.write(f" Total Unique Software Guidelines: {stats.total_guidelines}")
+            # buf.write(
+            #     f" Average Module Coverage per Software Guideline: {stats.average_coverage:.2f}"
+            # )
+            # buf.write("-" * 70)
+            # if stats.total_guidelines > 0:
+            #     buf.write(
+            #         f" {'Guide ID':<10}{'Target Software Product':<36}{'Status':<14}{'MSF Covered'}"
+            #     )
+            #     buf.write("-" * 70)
+            #     for item in stats.guidelines:
+            #         display_software = (
+            #             item.software_name[:34] + ".."
+            #             if len(item.software_name) > 34
+            #             else item.software_name
+            #         )
+            #         buf.write(
+            #             f" {item.guideline_id:<10}"
+            #             f"{display_software:<36}"
+            #             f"{item.status:<14}"
+            #             f"{item.coverage_count}"
+            #         )
+            #     buf.write("=" * 70)
 
             # Panel 6: OS Guideline Coverage Distribution
             os_stats = self.os_guide_service.get_os_guideline_coverage_stats()
@@ -274,6 +277,41 @@ class CLIAnalyticsService(AnalyticsService):
                     )
                     buf.write(
                         f" {idx:<5}{item.guideline_id:<10}{display_name:<20}{item.coverage_count:<12}{pct_str:<12}{bar}"
+                    )
+                buf.write("=" * 70)
+
+            # Panel 7: Minimal VM Guidelines Optimization (Set Cover)
+            vm_coverage = self.vm_guide_service.get_minimal_vm_guidelines_coverage(
+                total_count
+            )
+            buf.write("\n" + "=" * 70)
+            buf.write(f"{'MINIMAL VM GUIDELINES OPTIMIZATION (SET COVER)':^70}")
+            buf.write("=" * 70)
+            buf.write(
+                f" Total Metasploit Modules in DB: {vm_coverage.total_msf_modules_in_db}"
+            )
+            buf.write(
+                f" Total Coverable Modules (with guidelines): {vm_coverage.total_coverable_msf_modules}"
+            )
+            buf.write(
+                f" Minimal VM Guidelines Needed: {vm_coverage.minimal_os_guidelines_count}"
+            )
+            buf.write("-" * 70)
+            if vm_coverage.minimal_os_guidelines_count > 0:
+                buf.write(
+                    f" {'Rank':<6}{'OS Guide ID':<13}{'OS Guideline Setup':<20}{'SW Count':<10}{'MSF Covered':<13}{'Percentage':<12}{'Bar Chart'}"
+                )
+                buf.write("-" * 70)
+                for idx, item in enumerate(vm_coverage.os_guidelines, 1):
+                    pct_str = f"{item.msf_modules_coverage_percentage:.1f}%"
+                    bar = self._generate_bar(item.msf_modules_coverage_percentage)
+                    display_name = (
+                        item.os_name[:18] + ".."
+                        if len(item.os_name) > 18
+                        else item.os_name
+                    )
+                    buf.write(
+                        f" {idx:<5}{item.os_guideline_id:<13}{display_name:<20}{item.software_guidelines_count:<10}{item.msf_modules_covered_count:<13}{pct_str:<12}{bar}"
                     )
                 buf.write("=" * 70)
 

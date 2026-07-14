@@ -37,3 +37,10 @@ class OSGuidelineService(ABC):
         Retrieves OS guidelines along with the count of software guidelines using them.
         """
         pass
+
+    @abstractmethod
+    def get_all_guidelines(self) -> List[OSGuideline]:
+        """
+        Retrieves all OS guidelines.
+        """
+        pass

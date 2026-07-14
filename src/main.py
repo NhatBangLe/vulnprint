@@ -542,11 +542,18 @@ def handle_analytics_mode(
     sw_guide_service: SoftwareGuidelineService,
     os_guide_service: OSGuidelineService,
 ) -> None:
+    from services import DefaultVMGuidelineService
+
+    vm_guide_service = DefaultVMGuidelineService(
+        os_guide_service=os_guide_service,
+        sw_guide_service=sw_guide_service,
+    )
     analytics_service = CLIAnalyticsService(
         msf_service=msf_service,
         soft_service=soft_service,
         sw_guide_service=sw_guide_service,
         os_guide_service=os_guide_service,
+        vm_guide_service=vm_guide_service,
     )
     if args.summary:
         analytics_service.display_dashboard()

@@ -174,3 +174,8 @@ class DefaultOSGuidelineService(OSGuidelineService):
             average_coverage=round(average_coverage, 2),
             guidelines=items,
         )
+
+    def get_all_guidelines(self) -> List[OSGuideline]:
+        return [
+            OSGuideline.from_record(r) for r in self.os_guide_repo.get_all_guidelines()
+        ]

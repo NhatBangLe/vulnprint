@@ -106,7 +106,7 @@ class DefaultSoftwareGuidelineService(SoftwareGuidelineService):
                 )
             )
 
-        # Sort by coverage count descending, and then by software name
+        # Sort by coverage count descending
         items.sort(key=lambda x: (-x.coverage_count, x.guideline_id))
 
         average_coverage = (
