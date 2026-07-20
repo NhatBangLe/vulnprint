@@ -1,202 +1,190 @@
 # 📑 Vulnprint
 
-**Vulnprint** is a 100% self-hosted, open-source **Vulnerability Intelligence Analytics & Lab Blueprint Engine**. It bridges the gap between active threat framework intelligence and local penetration testing labs.
+**Vulnprint** is an open-source tool for parsing vulnerability metadata and building reproducible penetration testing lab environments. 
 
-Instead of relying on brittle, automated infrastructure scripts that constantly break due to legacy software dependency hell, Vulnprint treats vulnerability discovery analytically. It dynamically queries a live Metasploit instance via RPC, extracts module documentation and metadata, uses a local Small Language Model (SLM) to extract structured application configurations, logs the metrics into a local database ledger, and generates high-fidelity **Lab Blueprint Manuals** and **Statistical Reports**.
-
----
-
-## 🎯 The Problem & The Solution
-
-- **The Problem:** Building replication labs for vulnerability validation usually involves hours of guessing configuration settings, manual parsing of unstructured write-ups, and dealing with broken, hardcoded automation scripts that fail on legacy software.
-- **The Solution:** Vulnprint delegates the boring, heavy-lifting text parsing to a completely local, privacy-respecting AI. It organizes your attack surface into statistical metrics and generates step-by-step lab manuals so human operators can build target environments flawlessly.
+It connects to a live Metasploit RPC daemon (`msfrpcd`), extracts module details and documentation, uses a Language Model (LLM) to convert unstructured descriptions into structured target software configurations, stores records in a local SQLite database, and generates Markdown lab blueprint manuals.
 
 ---
 
-## 🛠️ System Architecture & Stack
+## 🎯 Overview & Problem Solved
 
-Vulnprint is architected for absolute data privacy and air-gapped capability. **No metrics, data profiles, or vulnerability descriptions ever leave your local machine.**
+- **The Problem:** Setting up vulnerable test environments manually requires reading unstructured write-ups, identifying specific software versions, and guessing required configuration settings.
+- **The Solution:** Vulnprint automates the extraction of target software parameters, vulnerable versions, and setup steps from Metasploit modules. It standardizes target specifications, reuses common OS/software setup guidelines, and outputs Markdown manuals for building lab VMs.
 
-```
-[User CLI Query]
-        │
-        ▼
-┌───────────────┐        RPC Calls        ┌─────────────────┐
-│ Python Engine │ ──────────────────────> │  msfrpcd Daemon │
-└───────────────┘                         └─────────────────┘
-        │
-        ├─────────────────────────────────────────┐
-        ▼ (Send Description & Docs)               ▼ (Store Comprehensive Ledger)
-┌─────────────────┐                     ┌─────────────────┐
-│ Local SLM Server│                     │  SQLite Ledger  │
-│ (Ollama/LocalAI)│                     │  (lab_hub.db)   │
-└─────────────────┘                     └─────────────────┘
-        │
-        ▼
-┌─────────────────┐
-│  Lab Blueprints │
-│ & Tech Reports  │
-└─────────────────┘
+---
+
+## 🛠️ Architecture & Tech Stack
+
+Vulnprint runs locally and can operate with local LLM servers (such as Ollama) or OpenAI-compatible cloud APIs. It also supports Model Context Protocol (MCP) servers for fetching external search context during guideline generation.
 
 ```
+[CLI Command]
+      │
+      ▼
+┌───────────────┐        MSF RPC        ┌─────────────────┐
+│ Vulnprint Core│ ────────────────────> │  msfrpcd Daemon │
+└───────────────┘                       └─────────────────┘
+      │
+      ├───────────────────┬───────────────────┐
+      ▼ (JSON Specs)      ▼ (Tools via MCP)   ▼ (Persist Records)
+┌───────────────┐   ┌───────────────┐   ┌───────────────┐
+│  LLM Endpoint │   │  MCP Server   │   │SQLite Database│
+│(Ollama/OpenAI)│   │ (Search Tool) │   │ (lab_hub.db)  │
+└───────────────┘   └───────────────┘   └───────────────┘
+      │
+      ▼
+┌───────────────┐
+│ Lab Blueprints│
+│  & MD Reports │
+└───────────────┘
+```
 
-- **Language Environment:** Python 3.10+
-- **Exploit Source Registry:** Metasploit Framework via the background RPC Daemon (`msfrpcd`)
-- **Framework Interface:** `pymetasploit3` (Reads directly from Metasploit's loaded RAM cache)
-- **AI Integration:** Official `openai` Python SDK (Using an OpenAI-compatible interface)
-- **Local Inference Engine:** Ollama / LocalAI (Running `llama3`, `mistral`, or `phi3` natively)
-- **Central Ledger:** SQLite (`sqlite3`)
+- **Runtime:** Python 3.10+
+- **Module Source:** Metasploit Framework RPC daemon (`msfrpcd`) via `pymetasploit3`
+- **LLM Interface:** OpenAI Python SDK / LangChain (compatible with Ollama, OpenRouter, or OpenAI endpoints)
+- **Tool Integration:** Model Context Protocol (MCP) via `langchain-mcp-adapters`
+- **Database:** SQLite (`sqlite3`)
+- **CLI Framework:** Python standard `argparse`
 
 ---
 
 ## 🚀 Key Features
 
-### 1. On-Demand Metasploit Querying & Documentation Extraction
+### 1. Metasploit RPC Module Extraction
+Queries loaded Metasploit modules by keyword, platform, or disclosure date. It retrieves metadata (CVEs, exploit rank, disclosure date, platform) and reads corresponding Markdown documentation files included with Metasploit.
 
-Queries active memory modules inside Metasploit via RPC based on user-defined CLI criteria (e.g., targeting specific platforms or disclosure dates). It extracts relevant metadata (rank, disclosure date, platform, CVE references) and automatically locates and retrieves the module's corresponding markdown documentation page (containing setup requirements and tested environments) from the Metasploit framework installation.
+### 2. Structured LLM Extraction
+Uses JSON mode to extract technical target specifications from unstructured module docs and descriptions:
+- Target software name and vulnerable versions
+- Required OS platforms and dependencies
+- Software configuration options (ports, flags, environment variables)
 
-### 2. Structured LLM Inference (Native JSON Mode)
+### 3. Guidelines & Lab Blueprint Manuals
+Generates step-by-step setup manuals for building vulnerable lab environments:
+- Reuses common OS setup guidelines across targets on the same platform
+- Reuses software installation steps for overlapping applications
+- Outputs clean Markdown files into the `vulnprint_blueprints/` directory
 
-Leverages local models using an OpenAI-compatible abstraction layer. It passes the raw exploit description and retrieved documentation to the local AI and forces it to operate in a strict `json_object` mode, ensuring clean, programmatically predictable output:
+### 4. Database Querying & Interactive Review
+- **Search & Catalog:** Search stored vulnerabilities by software name, OS platform, or exploit rank.
+- **Interactive Review:** Interactively review, modify, approve, or reject generated installation guidelines before applying them to lab builds.
 
-```json
-{
-  "software_name": "Apache Tomcat",
-  "vulnerable_versions": ["9.0.0.M1", "9.0.30"],
-  "required_configs": ["AJP connector enabled on port 8009"]
-}
-```
+### 5. Terminal Metrics & Analytics Dashboard
+Displays ASCII visual panels summarizing stored vulnerabilities by platform distribution, exploit reliability rank, software catalog counts, and guideline verification status.
 
-### 3. Persistent Analytics Ledger
-
-Maintains a local SQLite database tracking historical inquiries, CVE mappings, target platforms, ranks, disclosure dates, documentation, raw descriptions, and AI-extracted configuration flags—making it a custom intelligence platform tailored to your specific testing goals.
-
-### 4. Interactive Dashboard & Blueprints
-
-Generates clean terminal ASCII charts visualizing technology density distributions across your query parameters (so you know which core systems to build first). It outputs clean Markdown manuals outlining legacy archive download requirements, setup configurations, and validation lifecycles.
-
-### 5. VM Guideline Matching & Reuse Engine
-
-Instead of generating duplicate VM setup instructions for every single Metasploit module path, Vulnprint evaluates target compatibility (software name, target platform, and version overlap) against existing ledger records. When a match is found, the system links the guideline dynamically in the database, consolidating lab setups and avoiding redundant LLM generation calls.
+### 6. Model Context Protocol (MCP) Tool Integration
+Integrates with external search services using Model Context Protocol (MCP). AI agents query configured MCP HTTP tool endpoints (up to a configurable limit) to retrieve external context when identifying software setups and building installation guidelines.
 
 ---
 
 ## 📦 Installation & Setup
 
-### Prerequisites
+### 1. Prerequisites
+- **Python 3.10+**
+- **Metasploit Framework** (with `msfrpcd` installed)
+- **LLM Endpoint** (Local Ollama server or an OpenAI/OpenRouter API key)
+- **MCP Search Server (Optional)** (HTTP endpoint for external context lookup)
 
-1. **Metasploit Framework** installed.
-2. **Ollama** installed and running locally.
-
-### 1. Initialize the Local SLM
-
-Pull and spin up your preferred open-source model:
-
+### 2. Start Metasploit RPC Daemon
+Run `msfrpcd` in a terminal:
 ```bash
-ollama pull llama3
-
-```
-
-### 2. Start the Metasploit RPC Daemon
-
-Run the RPC server in a background terminal session:
-
-```bash
-msfrpcd -P your_secure_password -n -f -a 127.0.0.1
-
+msfrpcd -P your_rpc_password -n -f -a 127.0.0.1 -p 55553
 ```
 
 ### 3. Clone and Configure Vulnprint
-
-Clone this repository to your host:
-
 ```bash
 git clone https://github.com/yourusername/vulnprint.git
 cd vulnprint
 pip install -r requirements.txt
-
 ```
 
 Create a `.env` file in the root directory:
-
 ```env
-MSF_RPC_PASSWORD=your_secure_password
+# Metasploit RPC Configuration
+MSF_RPC_HOST=127.0.0.1
 MSF_RPC_PORT=55553
+MSF_RPC_PASSWORD=your_rpc_password
+
+# LLM Endpoint Configuration (Ollama / OpenRouter / OpenAI)
 AI_BASE_URL=http://localhost:11434/v1
 AI_MODEL=llama3
+AI_API_KEY=local-engine
 
+# Engine Outputs
+BLUEPRINTS_DIR=vulnprint_blueprints
+DATABASE_PATH=lab_hub.db
+
+# MCP Server Configuration
+MCP_SEARCH_URL=http://localhost:8000/mcp
+MCP_MAX_TOOL_CALLS=5
 ```
 
 ---
 
-## ⌨️ Usage
+## ⌨️ CLI Usage
 
-### Generate Intelligence & Build Blueprints
-
-Execute a targeted query against the Metasploit RPC engine to ingest modules and generate lab manuals:
+### 1. Ingest Metasploit Modules & Generate Blueprints
+Query Metasploit RPC for matching modules, parse technical specs using LLM, and generate lab manuals:
 
 ```bash
-python src/main.py search "type:exploit platform:linux" --limit 5
+# Basic keyword search with result limit:
+python src/main.py search "apache tomcat" --limit 5
+
+# Search with Metasploit search filter syntax and date filters:
+python src/main.py search "type:exploit platform:linux" --min-date 2024-01-01 --sort-date desc
 ```
 
-### View Technology Analytics Dashboard
-
-Display statistical distribution breakdowns, exploit rank spreads, and VM guideline coverage/consolidation stats from the SQLite ledger:
+### 2. View Database Metrics & Analytics
+Display terminal ASCII dashboards for stored vulnerability data and software statistics:
 
 ```bash
+# View terminal metrics dashboard:
 python src/main.py db analytics
-# or shortcut:
-python src/main.py analytics
-```
 
-### Export VM Guidelines
+# Export analytics report to a Markdown file:
+python src/main.py db analytics -o reports/metrics.md
 
-Export a specific guideline to a Markdown file using its unique **VM ID** (found in the analytics dashboard) or its **Metasploit module path**:
-
-```bash
-# Export using unique VM ID:
-python src/main.py export guide 1 -o reports/tomcat_guide.md
-
-# Export using Metasploit module path:
-python src/main.py export guide "exploit/multi/http/tomcat_mgr_deploy" -o reports/tomcat_mgr_guide.md
-
-# Export consolidated guideline by OS Guideline ID:
-python src/main.py export os 1 -o reports/os_guide.md
-```
-
-### Filter and Search Local Database
-
-Search local vulnerability profiles with wildcard support and filter by target platform/OS or exploit rank:
-
-```bash
-# General wildcard search:
-python src/main.py db search "apache*"
-
-# Wildcard search with OS and exploit rank filters, and export results:
-python src/main.py db search "apache*" --platform "linux" --rank "excellent" -o reports/apache_linux_excellent.txt
-```
-
-### View Software Catalog & Summary
-
-```bash
-# List all software cataloged in local database:
+# View software catalog list:
 python src/main.py db list
 
-# View summary breakdown of technology counts:
+# View technology breakdown summary:
 python src/main.py db summary
 ```
 
-### Review Guidelines Interactively
+### 3. Search Local Vulnerability Database
+Search local database records using wildcard syntax and filter criteria:
 
-Review, modify, approve, or reject unverified guidelines saved in the database:
+```bash
+# Search cataloged software with wildcards:
+python src/main.py db search "apache*"
+
+# Filter search by OS platform and exploit rank, saving output to a file:
+python src/main.py db search "apache*" --platform linux --rank excellent -o reports/apache_linux.txt
+```
+
+### 4. Interactive Guideline Review
+Review and manage unverified software and OS installation guidelines stored in the database:
 
 ```bash
 python src/main.py review
 ```
 
-### Access Your Lab Manuals
+### 5. Export Installation Guidelines
+Export specific VM installation guides or OS guidelines to Markdown files:
 
-Check the generated blueprints folder for target manual configuration details:
+```bash
+# Export guideline by database VM ID:
+python src/main.py export guide 1 -o reports/tomcat_guide.md
+
+# Export guideline by Metasploit module path:
+python src/main.py export guide "exploit/multi/http/tomcat_mgr_deploy" -o reports/tomcat_mgr.md
+
+# Export OS base guideline by OS ID:
+python src/main.py export os 1 -o reports/os_guide.md
+```
+
+### 6. Access Generated Lab Manuals
+Generated lab blueprint Markdown files are written to the directory configured in `BLUEPRINTS_DIR` (default: `vulnprint_blueprints/`):
 
 ```bash
 cat vulnprint_blueprints/CVE-2020-1938.md
@@ -204,12 +192,12 @@ cat vulnprint_blueprints/CVE-2020-1938.md
 
 ---
 
-## 🛡️ Privacy & Guardrails
+## 🔒 Privacy & Local Processing
 
-Vulnprint enforces strict privacy isolation. Under no circumstances are network requests, vulnerability identifiers, or telemetry files sent to external cloud APIs, public web trackers, or third-party analytical models.
+When configured with a local LLM server (such as Ollama or LocalAI), Vulnprint processes all module documentation, vulnerability descriptions, and database queries strictly on your local machine. No vulnerability data or system telemetry is sent externally.
 
 ---
 
 ## 📄 License
 
-This project is open-source and distributed under the **MIT License**. See `LICENSE` for more information.
+This project is licensed under the [MIT License](LICENSE.md).
