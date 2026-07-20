@@ -760,14 +760,20 @@ async def handle_search_ingestion(
 
     # Initialize agents
     logger.info("Initializing AI agents...")
-    tools = await MultiServerMCPClient(
-        {
-            "mcp_search": {
-                "transport": "http",
-                "url": settings.mcp_search_url,
+
+    try:
+        tools = await MultiServerMCPClient(
+            {
+                "mcp_search": {
+                    "transport": "http",
+                    "url": settings.mcp_search_url,
+                }
             }
-        }
-    ).get_tools()
+        ).get_tools()
+    except Exception as e:
+        logger.warning(f"Error initializing MCP tools: {e}")
+        tools = []
+
     extractor = VulnerabilityTargetExtractorAgent(
         tools=tools,
         ai_base_url=settings.ai_base_url,
