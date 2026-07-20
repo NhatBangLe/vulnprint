@@ -136,11 +136,19 @@ examples:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 examples:
-  python src/main.py db search "apache*" --platform linux --rank excellent -o reports/apache.txt
-  python src/main.py db analytics -o reports/metrics.md
-  python src/main.py db summary
-  python src/main.py db list
+  python main.py db search "apache*" --platform linux --rank excellent -o reports/apache.txt
+  python main.py db analytics -o reports/metrics.md
+  python main.py db summary
+  python main.py db list
 """,
+    )
+    db_parser.add_argument(
+        "-o",
+        "--output",
+        "--export",
+        dest="output",
+        type=str,
+        help="File path to save output reports as Markdown/text",
     )
     db_subparsers = db_parser.add_subparsers(
         dest="subcommand", title="database actions", help="Available database actions"
@@ -244,10 +252,18 @@ examples:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 examples:
-  python src/main.py export guide 1 -o reports/tomcat_guide.md
-  python src/main.py export guide "exploit/multi/http/tomcat_mgr_deploy" -o reports/tomcat_mgr.md
-  python src/main.py export os 1 -o reports/os_guide.md
+  python main.py export guide 1 -o reports/tomcat_guide.md
+  python main.py export guide "exploit/multi/http/tomcat_mgr_deploy" -o reports/tomcat_mgr.md
+  python main.py export os 1 -o reports/os_guide.md
 """,
+    )
+    export_parser.add_argument(
+        "-o",
+        "--output",
+        "--export",
+        dest="output",
+        type=str,
+        help="File path to save exported guideline as Markdown",
     )
     export_subparsers = export_parser.add_subparsers(
         dest="subcommand", title="export actions", help="Guideline export type"

@@ -287,7 +287,7 @@ class CLIAnalyticsService(AnalyticsService):
             buf.write("\n" + "=" * 75)
             buf.write(" ACTIONABLE LAB DEPLOYMENT HINTS:")
             buf.write(
-                "   - Use 'python src/main.py db search -s <software>' to inspect target details."
+                "   - Use 'python src/main.py db search <software>' to inspect target details."
             )
             buf.write(
                 "   - Use 'python src/main.py export os <guide_id>' to export VM setup blueprints."
