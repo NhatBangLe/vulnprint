@@ -1,4 +1,5 @@
 import logging
+import re
 from typing import Optional
 from .base import AnalyticsService
 from services import (
@@ -13,7 +14,8 @@ from utils import OutputBuffer, safe_print
 
 class CLIAnalyticsService(AnalyticsService):
     """
-    Concrete implementation of AnalyticsService displaying an ASCII dashboard in the terminal.
+    Concrete implementation of AnalyticsService displaying a clean ASCII metrics dashboard.
+    Follows Approach 1: The Funnel Narrative Flow.
     """
 
     def __init__(
@@ -31,254 +33,266 @@ class CLIAnalyticsService(AnalyticsService):
         self.vm_guide_service = vm_guide_service
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def _generate_bar(self, percentage: float, max_bar_length: int = 25) -> str:
-        """Generates an ASCII bar representing the percentage."""
+    def _clean_string(self, text: str) -> str:
+        """Sanitizes text by stripping invalid/non-printable unicode characters."""
+        if not text:
+            return ""
+        cleaned = text.replace("\ufffd", " ").replace("®", "").replace("™", "")
+        return re.sub(r"\s+", " ", cleaned).strip()
+
+    def _generate_bar(self, percentage: float, max_bar_length: int = 18) -> str:
+        """Generates an ASCII progress bar for percentages."""
+        if percentage < 0:
+            percentage = 0.0
+        elif percentage > 100:
+            percentage = 100.0
         filled_length = int(round((percentage / 100) * max_bar_length))
-        return "█" * filled_length
+        empty_length = max_bar_length - filled_length
+        return "#" * filled_length + "." * empty_length
 
     def display_dashboard(self) -> None:
         """
-        Outputs a beautiful CLI ASCII dashboard of the Top 10 software targets.
+        Outputs a 1-Page Executive Metrics Summary:
+        Macro System KPIs -> Top Software Target Density -> Quick Minimal VM Recommendation.
         """
         try:
             print = safe_print
             total_count = self.msf_service.get_total_count()
+            sw_stats = self.sw_guide_service.get_guideline_coverage_stats()
+            os_stats = self.os_guide_service.get_os_guideline_coverage_stats()
+            vm_coverage = self.vm_guide_service.get_minimal_vm_guidelines_coverage(
+                total_count
+            )
 
-            print("\n" + "=" * 70)
-            print(f"{'VULNPRINT TECHNOLOGY DENSITY METRICS':^70}")
-            print("=" * 70)
-            print(f" Total Vulnerability Profiles Indexed: {total_count}")
-            print("-" * 70)
+            total_sw_guides = sw_stats.total_guidelines
+            total_os_guides = os_stats.total_os_guidelines
+            minimal_vms = vm_coverage.minimal_os_guidelines_count
+
+            print("\n" + "=" * 75)
+            print(f"{'[ VULNPRINT EXECUTIVE METRICS SUMMARY ]':^75}")
+            print("=" * 75)
+            print(
+                f"  Total Indexed Profiles : {total_count:<6} | Software Guidelines Mapped : {total_sw_guides}"
+            )
+            print(
+                f"  OS Guidelines Active   : {total_os_guides:<6} | Minimal Lab VMs Required   : {minimal_vms}"
+            )
+            print("-" * 75)
 
             if total_count == 0:
-                print(" No records found in the database. Run a search first.")
-                print("=" * 70 + "\n")
+                print(
+                    "  No vulnerability profiles found in database. Ingest modules to populate dashboard."
+                )
+                print("=" * 75 + "\n")
                 return
 
-            # Query Top 10 technologies from SoftwareService
-            top_techs = self.soft_service.get_top_software(limit=10)
+            # Section 1: Top Target Software Density
+            print(f"\n{'[ TOP TARGET SOFTWARE DENSITY ]':^75}")
+            print("-" * 75)
+            print(
+                f" {'Rank':<5}{'Guide ID':<10}{'Target Software Product':<28}{'Count':<7}{'Density Bar':<22}"
+            )
+            print("-" * 75)
 
-            # Get software guidelines mapping to software names to display their Guide IDs
-            stats = self.sw_guide_service.get_guideline_coverage_stats()
+            top_techs = self.soft_service.get_top_software(limit=10)
             sw_to_guide_ids = {}
-            for item in stats.guidelines:
+            for item in sw_stats.guidelines:
                 sw_to_guide_ids.setdefault(item.software_name, []).append(
                     item.guideline_id
                 )
 
-            # Header for the table
-            print(
-                f"{'Rank':<6}{'Guide IDs':<12}{'Software Target':<30}{'Count':<8}{'Percentage':<10}"
-            )
-            print("-" * 70)
-
             for idx, (software_name, count) in enumerate(top_techs, 1):
-                percentage = (count / total_count) * 100
-                percentage_str = f"{percentage:.1f}%"
+                clean_name = self._clean_string(software_name)
+                pct = (count / total_count) * 100
                 guide_ids = sw_to_guide_ids.get(software_name, [])
-                guide_str = (
-                    ", ".join(str(gid) for gid in guide_ids) if guide_ids else "-"
-                )
+                guide_str = ", ".join(str(g) for g in guide_ids) if guide_ids else "-"
                 display_name = (
-                    software_name[:28] + ".."
-                    if len(software_name) > 28
-                    else software_name
+                    clean_name[:26] + ".." if len(clean_name) > 26 else clean_name
                 )
+                bar = self._generate_bar(pct, max_bar_length=12)
                 print(
-                    f"{idx:<6}{guide_str:<12}{display_name:<30}{count:<8}{percentage_str:<10}"
+                    f"  {idx:<4}{guide_str:<10}{display_name:<28}{count:<7}{bar} ({pct:.1f}%)"
                 )
 
-            print("=" * 70 + "\n")
-
-            # Query OS guideline coverage summary
-            os_stats = self.os_guide_service.get_os_guideline_coverage_stats()
-            total_os_sw_guides = sum(
-                item.coverage_count for item in os_stats.guidelines
-            )
-
-            print("=" * 70)
-            print(f"{'OS GUIDELINE COVERAGE SUMMARY':^70}")
-            print("=" * 70)
-            print(f" Total Software Guidelines Covered: {total_os_sw_guides}")
-            print("-" * 70)
-
-            if total_os_sw_guides == 0:
+            # Section 2: Quick Minimal VM Setup Recommendation Summary
+            if vm_coverage.os_guidelines:
+                print("\n" + "-" * 75)
+                print(f"{'[ MINIMAL LAB VM RECOMMENDATION SUMMARY ]':^75}")
+                print("-" * 75)
                 print(
-                    " No software guidelines linked to OS guidelines found in the database."
+                    f" {'Rank':<5}{'OS Guide ID':<13}{'OS Environment Setup':<24}{'Covered':<10}{'Efficiency':<20}"
                 )
-                print("=" * 70 + "\n")
-            else:
-                print(
-                    f"{'Rank':<6}{'Guide ID':<10}{'OS Guideline Setup':<30}{'SW Covered':<12}{'Percentage':<10}"
-                )
-                print("-" * 70)
-                for idx, item in enumerate(os_stats.guidelines, 1):
-                    percentage = (
-                        (item.coverage_count / total_os_sw_guides) * 100
-                        if total_os_sw_guides > 0
-                        else 0
+                print("-" * 75)
+                for idx, item in enumerate(vm_coverage.os_guidelines[:5], 1):
+                    clean_os = self._clean_string(item.os_name)
+                    display_os = (
+                        clean_os[:22] + ".." if len(clean_os) > 22 else clean_os
                     )
-                    percentage_str = f"{percentage:.1f}%"
-                    display_name = (
-                        item.os_name[:28] + ".."
-                        if len(item.os_name) > 28
-                        else item.os_name
-                    )
+                    pct = item.msf_modules_coverage_percentage
+                    bar = self._generate_bar(pct, max_bar_length=10)
                     print(
-                        f"{idx:<6}{item.guideline_id:<10}{display_name:<30}{item.coverage_count:<12}{percentage_str:<10}"
+                        f"  {idx:<4}{item.os_guideline_id:<13}{display_os:<24}{item.msf_modules_covered_count:<10}{bar} ({pct:.1f}%)"
                     )
-                print("=" * 70 + "\n")
+
+            print("\n" + "=" * 75)
+            print(
+                "  HINT: Run 'python src/main.py analytics' for deep threat intelligence"
+            )
+            print("=" * 75 + "\n")
 
         except Exception as e:
-            self._logger.error(f"Error displaying analytics: {e}")
+            self._logger.error(f"Error displaying dashboard summary: {e}")
 
     def display_analytics(self, export_path: Optional[str] = None) -> None:
         """
-        Displays detailed statistical metrics dashboard panels.
+        Displays a comprehensive 4-Phase Narrative Analytics Flow:
+        Phase 1: Threat Landscape & Exploit Intelligence
+        Phase 2: Target Software Breakdown & Density
+        Phase 3: Actionable Lab Blueprints & Minimal VM Optimization
         """
         try:
             total_count = self.msf_service.get_total_count()
             buf = OutputBuffer(export_path)
 
-            buf.write("=" * 70)
-            buf.write(f"{'VULNPRINT INTELLIGENCE DETAILED ANALYTICS':^70}")
-            buf.write("=" * 70)
+            buf.write("=" * 75)
+            buf.write(f"{'[ VULNPRINT DEEP-DIVE THREAT & LAB ANALYTICS ]':^75}")
+            buf.write("=" * 75)
             buf.write(f" Total Indexed Vulnerability Profiles: {total_count}")
-            buf.write("-" * 70)
+            buf.write("-" * 75)
 
             if total_count == 0:
-                buf.write(" No records found in the database. Run a search first.")
-                buf.write("=" * 70)
+                buf.write(
+                    " No records found in database. Run search or ingestion first."
+                )
+                buf.write("=" * 75)
                 buf.save()
                 return
 
-            # Panel 1: Exploit Reliability Distribution
+            # PHASE 1: THREAT LANDSCAPE & EXPLOIT INTELLIGENCE
+            buf.write("\n" + "+" + "-" * 73 + "+")
+            buf.write(f"| {'PHASE 1: THREAT LANDSCAPE & EXPLOIT PROFILE':<71} |")
+            buf.write("+" + "-" * 73 + "+")
+
+            # Panel 1.1: Exploit Reliability Distribution
             ranks = self.msf_service.get_rank_distribution()
-            buf.write("\n" + "=" * 70)
-            buf.write(f"{'EXPLOIT RELIABILITY DISTRIBUTION':^70}")
-            buf.write("=" * 70)
-            buf.write(f" {'Rank':<12}{'Count':<10}{'Percentage':<12}{'Bar Chart'}")
-            buf.write("-" * 70)
+            buf.write("\n [1.1] EXPLOIT RELIABILITY DISTRIBUTION")
+            buf.write("-" * 75)
+            buf.write(
+                f" {'Reliability Rank':<18}{'Count':<8}{'Share':<10}{'Distribution Bar'}"
+            )
+            buf.write("-" * 75)
             for rank_name, count in ranks:
                 pct = (count / total_count) * 100
-                pct_str = f"{pct:.1f}%"
-                bar = self._generate_bar(pct)
-                buf.write(f" {rank_name:<12}{count:<10}{pct_str:<12}{bar}")
-            buf.write("=" * 70)
+                bar = self._generate_bar(pct, max_bar_length=18)
+                buf.write(f"  {rank_name:<17}{count:<8}{pct:.1f}%     {bar}")
 
-            # Panel 2: Target Platform & OS Coverage
+            # Panel 1.2: Target Platform Distribution
             platforms = self.msf_service.get_platform_distribution()
-            platform_total = sum(count for _, count in platforms)
-            buf.write("\n" + "=" * 70)
-            buf.write(f"{'TARGET PLATFORM DISTRIBUTION':^70}")
-            buf.write("=" * 70)
-            buf.write(f" {'Platform':<12}{'Count':<10}{'Percentage':<12}{'Bar Chart'}")
-            buf.write("-" * 70)
+            platform_total = sum(c for _, c in platforms)
+            buf.write("\n\n [1.2] TARGET PLATFORM BREAKDOWN")
+            buf.write("-" * 75)
+            buf.write(
+                f" {'Target Platform':<18}{'Count':<8}{'Share':<10}{'Distribution Bar'}"
+            )
+            buf.write("-" * 75)
             for plat_name, count in platforms:
                 pct = (count / platform_total * 100) if platform_total > 0 else 0
-                pct_str = f"{pct:.1f}%"
-                bar = self._generate_bar(pct)
-                buf.write(f" {plat_name:<12}{count:<10}{pct_str:<12}{bar}")
-            buf.write("=" * 70)
+                bar = self._generate_bar(pct, max_bar_length=18)
+                buf.write(f"  {plat_name:<17}{count:<8}{pct:.1f}%     {bar}")
 
-            # Panel 3: Temporal Analysis (Disclosure Timeline)
+            # Panel 1.3: Temporal Analysis (Disclosure Timeline)
             timeline = self.msf_service.get_disclosure_timeline()
-            buf.write("\n" + "=" * 70)
-            buf.write(f"{'VULNERABILITY DISCLOSURE TIMELINE':^70}")
-            buf.write("=" * 70)
-            buf.write(f" {'Year':<12}{'Count':<10}{'Percentage':<12}{'Bar Chart'}")
-            buf.write("-" * 70)
+            buf.write("\n\n [1.3] VULNERABILITY DISCLOSURE TIMELINE")
+            buf.write("-" * 75)
+            buf.write(
+                f" {'Disclosure Year':<18}{'Count':<8}{'Share':<10}{'Distribution Bar'}"
+            )
+            buf.write("-" * 75)
             for year, count in timeline:
                 pct = (count / total_count) * 100
-                pct_str = f"{pct:.1f}%"
-                bar = self._generate_bar(pct)
-                buf.write(f" {year:<12}{count:<10}{pct_str:<12}{bar}")
-            buf.write("=" * 70)
+                bar = self._generate_bar(pct, max_bar_length=18)
+                buf.write(f"  {year:<17}{count:<8}{pct:.1f}%     {bar}")
 
-            # Panel 4: Common Required Configurations
-            # configs = self.soft_service.get_required_configurations()
-            # if configs:
-            #     from collections import Counter
+            # PHASE 2: TARGET SOFTWARE BREAKDOWN & DENSITY
+            buf.write("\n\n" + "+" + "-" * 73 + "+")
+            buf.write(
+                f"| {'PHASE 2: TARGET SOFTWARE DENSITY & GUIDELINE MAPPING':<71} |"
+            )
+            buf.write("+" + "-" * 73 + "+")
 
-            #     config_counts = Counter(configs).most_common(5)
-            #     buf.write("\n" + "=" * 70)
-            #     buf.write(f"{'COMMON LAB CONFIGURATION FLAGS':^70}")
-            #     buf.write("=" * 70)
-            #     buf.write(f" {'Configuration Requirement':<55}{'Occurrences':<10}")
-            #     buf.write("-" * 70)
-            #     for idx, (config_name, count) in enumerate(config_counts, 1):
-            #         display_config = (
-            #             config_name[:52] + ".."
-            #             if len(config_name) > 52
-            #             else config_name
-            #         )
-            #         buf.write(f" {idx}. {display_config:<51}{count:<10}")
-            #     buf.write("=" * 70)
+            sw_stats = self.sw_guide_service.get_guideline_coverage_stats()
+            top_techs = self.soft_service.get_top_software(limit=15)
+            sw_to_guide_ids = {}
+            for item in sw_stats.guidelines:
+                sw_to_guide_ids.setdefault(item.software_name, []).append(
+                    item.guideline_id
+                )
 
-            # Panel 5: Software Guideline Coverage & Consolidation
-            # stats = self.sw_guide_service.get_guideline_coverage_stats()
-            # buf.write("\n" + "=" * 70)
-            # buf.write(f"{'SOFTWARE GUIDELINE COVERAGE & CONSOLIDATION':^70}")
-            # buf.write("=" * 70)
-            # buf.write(f" Total Unique Software Guidelines: {stats.total_guidelines}")
-            # buf.write(
-            #     f" Average Module Coverage per Software Guideline: {stats.average_coverage:.2f}"
-            # )
-            # buf.write("-" * 70)
-            # if stats.total_guidelines > 0:
-            #     buf.write(
-            #         f" {'Guide ID':<10}{'Target Software Product':<36}{'Status':<14}{'MSF Covered'}"
-            #     )
-            #     buf.write("-" * 70)
-            #     for item in stats.guidelines:
-            #         display_software = (
-            #             item.software_name[:34] + ".."
-            #             if len(item.software_name) > 34
-            #             else item.software_name
-            #         )
-            #         buf.write(
-            #             f" {item.guideline_id:<10}"
-            #             f"{display_software:<36}"
-            #             f"{item.status:<14}"
-            #             f"{item.coverage_count}"
-            #         )
-            #     buf.write("=" * 70)
+            buf.write(
+                f" {'Rank':<5}{'Guide ID':<10}{'Software Target':<28}{'Count':<7}{'Density Bar'}"
+            )
+            buf.write("-" * 75)
+            for idx, (software_name, count) in enumerate(top_techs, 1):
+                clean_name = self._clean_string(software_name)
+                pct = (count / total_count) * 100
+                guide_ids = sw_to_guide_ids.get(software_name, [])
+                guide_str = ", ".join(str(g) for g in guide_ids) if guide_ids else "-"
+                display_name = (
+                    clean_name[:26] + ".." if len(clean_name) > 26 else clean_name
+                )
+                bar = self._generate_bar(pct, max_bar_length=12)
+                buf.write(
+                    f"  {idx:<4}{guide_str:<10}{display_name:<28}{count:<7}{bar} ({pct:.1f}%)"
+                )
 
-            # Panel 6: Minimal VM Guidelines Optimization (Set Cover)
+            # PHASE 3: ACTIONABLE LAB BLUEPRINTS & MINIMAL VM OPTIMIZATION
+            buf.write("\n\n" + "+" + "-" * 73 + "+")
+            buf.write(
+                f"| {'PHASE 3: ACTIONABLE LAB BLUEPRINT OPTIMIZATION (SET COVER)':<71} |"
+            )
+            buf.write("+" + "-" * 73 + "+")
+
             vm_coverage = self.vm_guide_service.get_minimal_vm_guidelines_coverage(
                 total_count
             )
-            buf.write("\n" + "=" * 70)
-            buf.write(f"{'MINIMAL VM GUIDELINES OPTIMIZATION (SET COVER)':^70}")
-            buf.write("=" * 70)
             buf.write(
-                f" Total Metasploit Modules in DB: {vm_coverage.total_msf_modules_in_db}"
+                f" Total Metasploit Modules in DB      : {vm_coverage.total_msf_modules_in_db}"
             )
             buf.write(
-                f" Total Coverable Modules (with guidelines): {vm_coverage.total_coverable_msf_modules}"
+                f" Total Coverable Modules (Guidelines): {vm_coverage.total_coverable_msf_modules}"
             )
             buf.write(
-                f" Minimal VM Guidelines Needed: {vm_coverage.minimal_os_guidelines_count}"
+                f" Minimal VM Guidelines Needed        : {vm_coverage.minimal_os_guidelines_count}"
             )
-            buf.write("-" * 70)
+            buf.write("-" * 75)
+
             if vm_coverage.minimal_os_guidelines_count > 0:
                 buf.write(
-                    f" {'Rank':<6}{'OS Guide ID':<13}{'OS Guideline Setup':<20}{'SW Count':<10}{'MSF Covered':<13}{'Percentage':<12}{'Bar Chart'}"
+                    f" {'Rank':<5}{'OS Guide ID':<13}{'OS Guideline Setup':<22}{'SW Count':<9}{'Modules':<9}{'Coverage Efficiency'}"
                 )
-                buf.write("-" * 70)
+                buf.write("-" * 75)
                 for idx, item in enumerate(vm_coverage.os_guidelines, 1):
-                    pct_str = f"{item.msf_modules_coverage_percentage:.1f}%"
-                    bar = self._generate_bar(item.msf_modules_coverage_percentage)
-                    display_name = (
-                        item.os_name[:18] + ".."
-                        if len(item.os_name) > 18
-                        else item.os_name
+                    clean_os = self._clean_string(item.os_name)
+                    display_os = (
+                        clean_os[:20] + ".." if len(clean_os) > 20 else clean_os
                     )
+                    pct = item.msf_modules_coverage_percentage
+                    bar = self._generate_bar(pct, max_bar_length=10)
                     buf.write(
-                        f" {idx:<5}{item.os_guideline_id:<13}{display_name:<20}{item.software_guidelines_count:<10}{item.msf_modules_covered_count:<13}{pct_str:<12}{bar}"
+                        f"  {idx:<4}{item.os_guideline_id:<13}{display_os:<22}"
+                        f"{item.software_guidelines_count:<9}{item.msf_modules_covered_count:<9}"
+                        f"{bar} ({pct:.1f}%)"
                     )
-                buf.write("=" * 70)
 
+            buf.write("\n" + "=" * 75)
+            buf.write(" ACTIONABLE LAB DEPLOYMENT HINTS:")
+            buf.write(
+                "   - Use 'python src/main.py db search -s <software>' to inspect target details."
+            )
+            buf.write(
+                "   - Use 'python src/main.py export os <guide_id>' to export VM setup blueprints."
+            )
+            buf.write("=" * 75)
             buf.save()
         except Exception as e:
             self._logger.error(f"Error displaying advanced analytics: {e}")
@@ -291,17 +305,16 @@ class CLIAnalyticsService(AnalyticsService):
             software_list = self.soft_service.get_all_software()
             buf = OutputBuffer(export_path)
 
-            buf.write("=" * 70)
-            buf.write(f"{'INDEXED SOFTWARE TARGETS':^70}")
-            buf.write("=" * 70)
+            buf.write("=" * 75)
+            buf.write(f"{'[ INDEXED SOFTWARE TARGETS ]':^75}")
+            buf.write("=" * 75)
 
             if not software_list:
                 buf.write(" No software profiles found in the database.")
-                buf.write("=" * 70 + "\n")
+                buf.write("=" * 75 + "\n")
                 buf.save()
                 return
 
-            # Get guideline coverage stats to map software names to guideline IDs
             stats = self.sw_guide_service.get_guideline_coverage_stats()
             sw_to_guide_ids = {}
             for item in stats.guidelines:
@@ -310,14 +323,17 @@ class CLIAnalyticsService(AnalyticsService):
                 )
 
             for idx, name in enumerate(software_list, 1):
+                clean_name = self._clean_string(name)
                 guide_ids = sw_to_guide_ids.get(name, [])
                 if guide_ids:
                     guide_str = ", ".join(str(gid) for gid in guide_ids)
-                    buf.write(f"  {idx:>3}. {name} (Software Guide IDs: {guide_str})")
+                    buf.write(
+                        f"  {idx:>3}. {clean_name} (Software Guide IDs: {guide_str})"
+                    )
                 else:
-                    buf.write(f"  {idx:>3}. {name}")
+                    buf.write(f"  {idx:>3}. {clean_name}")
 
-            buf.write("=" * 70)
+            buf.write("=" * 75)
             buf.save()
         except Exception as e:
             self._logger.error(f"Error displaying software list: {e}")
@@ -338,9 +354,9 @@ class CLIAnalyticsService(AnalyticsService):
             )
             buf = OutputBuffer(export_path)
 
-            buf.write("=" * 70)
-            buf.write(f"{'LOCAL DATABASE SEARCH RESULTS':^70}")
-            buf.write("=" * 70)
+            buf.write("=" * 75)
+            buf.write(f"{'[ LOCAL DATABASE SEARCH RESULTS ]':^75}")
+            buf.write("=" * 75)
 
             filters = []
             if software_pattern:
@@ -352,14 +368,14 @@ class CLIAnalyticsService(AnalyticsService):
 
             if filters:
                 buf.write(f" Active Filters: {', '.join(filters)}")
-                buf.write("-" * 70)
+                buf.write("-" * 75)
 
             buf.write(f" Total Matches Found: {len(search_results)}")
-            buf.write("-" * 70)
+            buf.write("-" * 75)
 
             if not search_results:
                 buf.write(" No matching records found.")
-                buf.write("=" * 70)
+                buf.write("=" * 75)
                 buf.save()
                 return
 
@@ -370,13 +386,13 @@ class CLIAnalyticsService(AnalyticsService):
                 buf.write(f"     Exploit Rank: {msf_module.rank}")
                 buf.write(f"     Disclosure Date: {msf_module.disclosure_date}")
                 if software:
-                    buf.write(f"     Target:       {software.name}")
+                    clean_sw = self._clean_string(software.name)
+                    buf.write(f"     Target:       {clean_sw}")
                     buf.write(f"     CVEs:         {', '.join(software.cves)}")
                     buf.write(
                         f"     Versions:     {', '.join(software.vulnerable_versions)}"
                     )
 
-                # Retrieve and display associated guideline IDs for tracking/exporting
                 sw_guides = self.sw_guide_service.get_software_guidelines_by_path(
                     msf_module.path
                 )
@@ -391,7 +407,7 @@ class CLIAnalyticsService(AnalyticsService):
                         buf.write(f"     OS Guide ID:       {os_ids_str}")
                 buf.write("")
 
-            buf.write("=" * 70)
+            buf.write("=" * 75)
             buf.save()
         except Exception as e:
             self._logger.error(f"Error displaying search results: {e}")
