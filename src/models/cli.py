@@ -3,18 +3,16 @@ from pydantic import BaseModel
 
 
 class CLIArguments(BaseModel):
-    search: Optional[str] = None
-    analytics: bool = False
-    summary: bool = False
-    list_software: bool = False
-    search_db: Optional[str] = None
+    command: Optional[str] = None
+    subcommand: Optional[str] = None
+    query: Optional[str] = None
+    pattern: Optional[str] = None
+    target: Optional[str] = None
+    os_id: Optional[int] = None
     platform: Optional[str] = None
     rank: Optional[str] = None
-    export: Optional[str] = None
+    output: Optional[str] = None
     limit: Optional[int] = None
-    review: bool = False
-    export_guide: Optional[str] = None
-    export_guideline_by_os: Optional[str] = None
     min_date: Optional[str] = None
     max_date: Optional[str] = None
     sort_date: Optional[str] = None

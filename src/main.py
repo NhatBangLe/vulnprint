@@ -51,133 +51,274 @@ def validate_date_format(date_str: str) -> str:
 
 def parse_args() -> CLIArguments:
     parser = argparse.ArgumentParser(
-        description="Vulnprint - Vulnerability Intelligence & Lab Blueprint Engine",
+        prog="vulnprint",
+        description="Vulnprint - Vulnerability Intelligence Analytics & Lab Blueprint Engine",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 examples:
-  # Search Metasploit, run search agent and build blueprints (limit to 5):
-  python src/main.py --search "apache tomcat" --limit 5
+  # Query Metasploit framework and generate lab blueprints:
+  python src/main.py search "apache tomcat" -l 5
 
-  # Interactively review all unverified VM guidelines in the database:
-  python src/main.py --review
+  # Search local database for Apache vulnerabilities:
+  python src/main.py db search "apache*" -p linux -r excellent -o reports/apache_linux.txt
 
-  # Export the VM guideline for a specific Metasploit path:
-  python src/main.py --export-guide "exploit/multi/http/tomcat_mgr_deploy" --export reports/tomcat_mgr.md
+  # View terminal ASCII analytics dashboard:
+  python src/main.py db analytics
+  python src/main.py analytics
 
-  # Export the VM guideline using its unique database VM ID:
-  python src/main.py --export-guide 1 --export reports/tomcat_guide_v1.md
+  # View software catalog & summary:
+  python src/main.py db list
+  python src/main.py db summary
 
-  # Show basic software vulnerability counts:
-  python src/main.py --summary
+  # Interactively review unverified VM guidelines:
+  python src/main.py review
 
-  # Show detailed metrics:
-  python src/main.py --analytics
+  # Export a VM installation guideline by VM ID or module path:
+  python src/main.py export guide 1 -o reports/tomcat_guide.md
+  python src/main.py export guide "exploit/multi/http/tomcat_mgr_deploy" -o reports/tomcat_guide.md
 
-  # List all unique software targets in the database:
-  python src/main.py --list-software
-
-  # Search local database for Apache vulnerabilities with Linux platform & excellent rank filter, and export output:
-  python src/main.py --search-db "apache*" --platform "linux" --rank "excellent" --export reports/apache_linux_excellent.txt
+  # Export consolidated VM guideline by OS Guideline ID:
+  python src/main.py export os 1 -o reports/os_guide.md
 """,
     )
 
-    group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument(
-        "--search",
-        type=str,
-        help="Query active Metasploit framework module registry and generate new lab blueprints",
-    )
-    group.add_argument(
-        "--analytics",
-        action="store_true",
-        help="Generate comprehensive ASCII metrics panels, technology distributions, and VM guideline coverage statistics",
-    )
-    group.add_argument(
-        "--summary",
-        action="store_true",
-        help="Generate summary of target technology counts and percentages from local database",
-    )
-    group.add_argument(
-        "--list-software",
-        action="store_true",
-        help="Display all unique software products cataloged in the local database",
-    )
-    group.add_argument(
-        "--search-db",
-        type=str,
-        help="Search vulnerability profiles in local database with SQL wildcard support",
-    )
-    group.add_argument(
-        "--review",
-        action="store_true",
-        help="Start interactive review workflow to approve, modify, or reject unverified guidelines",
-    )
-    group.add_argument(
-        "--export-guide",
-        type=str,
-        help="Retrieve and output a VM installation guideline by Metasploit path or unique VM ID",
-    )
-    group.add_argument(
-        "--export-guideline-by-os",
-        type=str,
-        help="Retrieve and output a consolidated VM installation guideline for an OS guideline ID, listing all associated software guidelines",
+    subparsers = parser.add_subparsers(
+        dest="command", title="commands", help="Available subcommands"
     )
 
-    # Optional filters and options
-    parser.add_argument(
-        "--platform",
-        type=str,
-        help="Filter database searches/queries by target OS platform (e.g. linux, windows)",
+    # -------------------------------------------------------------
+    # Subcommand: search
+    # -------------------------------------------------------------
+    search_parser = subparsers.add_parser(
+        "search",
+        help="Query active Metasploit framework module registry and generate lab blueprints",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+examples:
+  python src/main.py search "apache tomcat" --limit 5
+  python src/main.py search "type:exploit platform:linux" --min-date 2025-01-01 --sort-date desc
+""",
     )
-    parser.add_argument(
-        "--rank",
+    search_parser.add_argument(
+        "query",
         type=str,
-        help="Filter database searches/queries by exploit reliability rank (e.g. excellent, great)",
+        help="Search query term or Metasploit filter (e.g., 'apache tomcat', 'type:exploit platform:linux')",
     )
-    parser.add_argument(
-        "--export",
-        type=str,
-        help="File path to save output reports, list details, or guidelines as Markdown",
-    )
-    parser.add_argument(
+    search_parser.add_argument(
+        "-l",
         "--limit",
         type=int,
-        help="Cap the maximum number of Metasploit modules to ingest and parse per search",
+        help="Cap the maximum number of Metasploit modules to ingest and parse",
     )
-    parser.add_argument(
+    search_parser.add_argument(
         "--min-date",
         type=validate_date_format,
         help="Filter search results by minimum disclosure date (YYYY-MM-DD)",
     )
-    parser.add_argument(
+    search_parser.add_argument(
         "--max-date",
         type=validate_date_format,
         help="Filter search results by maximum disclosure date (YYYY-MM-DD)",
     )
-    parser.add_argument(
+    search_parser.add_argument(
         "--sort-date",
         type=str,
         choices=["asc", "desc"],
         help="Sort search results by disclosure date ('asc' or 'desc')",
     )
 
+    # -------------------------------------------------------------
+    # Subcommand: db
+    # -------------------------------------------------------------
+    db_parser = subparsers.add_parser(
+        "db",
+        help="Query local database ledger, view analytics, catalog, and software summary",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+examples:
+  python src/main.py db search "apache*" --platform linux --rank excellent -o reports/apache.txt
+  python src/main.py db analytics -o reports/metrics.md
+  python src/main.py db summary
+  python src/main.py db list
+""",
+    )
+    db_subparsers = db_parser.add_subparsers(
+        dest="subcommand", title="database actions", help="Available database actions"
+    )
+
+    # db search
+    db_search_parser = db_subparsers.add_parser(
+        "search",
+        help="Search vulnerability profiles in local database with SQL wildcard support",
+    )
+    db_search_parser.add_argument(
+        "pattern",
+        type=str,
+        help="Wildcard search pattern for software (e.g. 'apache*')",
+    )
+    db_search_parser.add_argument(
+        "-p",
+        "--platform",
+        type=str,
+        help="Filter search results by target OS platform (e.g. linux, windows)",
+    )
+    db_search_parser.add_argument(
+        "-r",
+        "--rank",
+        type=str,
+        help="Filter search results by exploit reliability rank (e.g. excellent, great)",
+    )
+    db_search_parser.add_argument(
+        "-o",
+        "--output",
+        "--export",
+        dest="output",
+        type=str,
+        help="File path to save search results",
+    )
+
+    # db analytics
+    db_analytics_parser = db_subparsers.add_parser(
+        "analytics",
+        help="Generate ASCII metrics panels, technology distributions, and VM guideline coverage statistics",
+    )
+    db_analytics_parser.add_argument(
+        "-o",
+        "--output",
+        "--export",
+        dest="output",
+        type=str,
+        help="File path to save analytics report as Markdown",
+    )
+
+    # db summary
+    db_subparsers.add_parser(
+        "summary",
+        help="Generate summary of target technology counts and percentages from local database",
+    )
+
+    # db list
+    db_list_parser = db_subparsers.add_parser(
+        "list",
+        help="Display all unique software products cataloged in the local database",
+    )
+    db_list_parser.add_argument(
+        "-o",
+        "--output",
+        "--export",
+        dest="output",
+        type=str,
+        help="File path to save software list as Markdown",
+    )
+
+    # -------------------------------------------------------------
+    # Subcommand: analytics (shortcut for db analytics)
+    # -------------------------------------------------------------
+    analytics_parser = subparsers.add_parser(
+        "analytics",
+        help="Display comprehensive ASCII metrics panels & statistics (shortcut for 'db analytics')",
+    )
+    analytics_parser.add_argument(
+        "-o",
+        "--output",
+        "--export",
+        dest="output",
+        type=str,
+        help="File path to save analytics report as Markdown",
+    )
+
+    # -------------------------------------------------------------
+    # Subcommand: review
+    # -------------------------------------------------------------
+    subparsers.add_parser(
+        "review",
+        help="Start interactive review workflow to approve, modify, or reject unverified guidelines",
+    )
+
+    # -------------------------------------------------------------
+    # Subcommand: export
+    # -------------------------------------------------------------
+    export_parser = subparsers.add_parser(
+        "export",
+        help="Retrieve and export VM installation guidelines",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+examples:
+  python src/main.py export guide 1 -o reports/tomcat_guide.md
+  python src/main.py export guide "exploit/multi/http/tomcat_mgr_deploy" -o reports/tomcat_mgr.md
+  python src/main.py export os 1 -o reports/os_guide.md
+""",
+    )
+    export_subparsers = export_parser.add_subparsers(
+        dest="subcommand", title="export actions", help="Guideline export type"
+    )
+
+    # export guide
+    export_guide_parser = export_subparsers.add_parser(
+        "guide",
+        help="Export VM installation guideline by Metasploit module path or unique database VM ID",
+    )
+    export_guide_parser.add_argument(
+        "target",
+        type=str,
+        help="Metasploit module path or integer VM ID",
+    )
+    export_guide_parser.add_argument(
+        "-o",
+        "--output",
+        "--export",
+        dest="output",
+        type=str,
+        help="File path to save exported guideline as Markdown",
+    )
+
+    # export os
+    export_os_parser = export_subparsers.add_parser(
+        "os",
+        help="Export consolidated VM installation guideline for an OS guideline ID",
+    )
+    export_os_parser.add_argument(
+        "os_id",
+        type=int,
+        help="Unique OS Guideline ID",
+    )
+    export_os_parser.add_argument(
+        "-o",
+        "--output",
+        "--export",
+        dest="output",
+        type=str,
+        help="File path to save exported guideline as Markdown",
+    )
+
     args = parser.parse_args()
+
+    if not args.command:
+        parser.print_help()
+        sys.exit(0)
+
+    if args.command == "db" and not args.subcommand:
+        db_parser.print_help()
+        sys.exit(0)
+
+    if args.command == "export" and not args.subcommand:
+        export_parser.print_help()
+        sys.exit(0)
+
     return CLIArguments(
-        search=args.search,
-        analytics=args.analytics,
-        summary=args.summary,
-        list_software=args.list_software,
-        search_db=args.search_db,
-        platform=args.platform,
-        rank=args.rank,
-        export=args.export,
-        limit=args.limit,
-        review=args.review,
-        export_guide=args.export_guide,
-        export_guideline_by_os=args.export_guideline_by_os,
-        min_date=args.min_date,
-        max_date=args.max_date,
-        sort_date=args.sort_date,
+        command=args.command,
+        subcommand=getattr(args, "subcommand", None),
+        query=getattr(args, "query", None),
+        pattern=getattr(args, "pattern", None),
+        target=getattr(args, "target", None),
+        os_id=getattr(args, "os_id", None),
+        platform=getattr(args, "platform", None),
+        rank=getattr(args, "rank", None),
+        output=getattr(args, "output", None),
+        limit=getattr(args, "limit", None),
+        min_date=getattr(args, "min_date", None),
+        max_date=getattr(args, "max_date", None),
+        sort_date=getattr(args, "sort_date", None),
     )
 
 
@@ -555,18 +696,20 @@ def handle_analytics_mode(
         os_guide_service=os_guide_service,
         vm_guide_service=vm_guide_service,
     )
-    if args.summary:
+    if args.command == "db" and args.subcommand == "summary":
         analytics_service.display_dashboard()
-    elif args.analytics:
-        analytics_service.display_analytics(export_path=args.export)
-    elif args.list_software:
-        analytics_service.display_software_list(export_path=args.export)
-    elif args.search_db:
+    elif args.command == "analytics" or (
+        args.command == "db" and args.subcommand == "analytics"
+    ):
+        analytics_service.display_analytics(export_path=args.output)
+    elif args.command == "db" and args.subcommand == "list":
+        analytics_service.display_software_list(export_path=args.output)
+    elif args.command == "db" and args.subcommand == "search":
         analytics_service.display_search_results(
-            software_pattern=args.search_db,
+            software_pattern=args.pattern,
             platform=args.platform,
             rank=args.rank,
-            export_path=args.export,
+            export_path=args.output,
         )
 
 
@@ -641,9 +784,9 @@ async def handle_search_ingestion(
         software_guideline_generator_agent=software_guideline_generator_agent,
     )
 
-    logger.info(f"Executing search query: '{args.search}'")
+    logger.info(f"Executing search query: '{args.query}'")
     module_paths = metasploit_service.search_modules(
-        args.search,
+        args.query,
         min_date=args.min_date,
         max_date=args.max_date,
         sort_by_date=args.sort_date,
@@ -741,40 +884,32 @@ def main():
         )
     )
 
-    # Route based on command/mode
-    if (
-        args.analytics
-        or args.summary
-        or args.list_software
-        or args.search_db
-        or args.review
-        or args.export_guide
-        or args.export_guideline_by_os
-    ):
-        if args.review:
-            handle_review_mode(os_guide_service, sw_guide_service, soft_service, logger)
-        elif args.export_guide:
+    # Route based on command/subcommand
+    if args.command == "review":
+        handle_review_mode(os_guide_service, sw_guide_service, soft_service, logger)
+    elif args.command == "export":
+        if args.subcommand == "guide":
             handle_export_guide_mode(
                 os_guide_service=os_guide_service,
                 sw_guide_service=sw_guide_service,
-                export_guide_path=args.export_guide,
-                export_file_path=args.export,
+                export_guide_path=args.target,
+                export_file_path=args.output,
                 logger=logger,
             )
-        elif args.export_guideline_by_os:
+        elif args.subcommand == "os":
             handle_export_guideline_by_os_mode(
                 os_guide_service=os_guide_service,
                 sw_guide_service=sw_guide_service,
                 soft_service=soft_service,
-                export_guideline_by_os_id=args.export_guideline_by_os,
-                export_file_path=args.export,
+                export_guideline_by_os_id=str(args.os_id),
+                export_file_path=args.output,
                 logger=logger,
             )
-        else:
-            handle_analytics_mode(
-                args, msf_service, soft_service, sw_guide_service, os_guide_service
-            )
-    elif args.search:
+    elif args.command in ["db", "analytics"]:
+        handle_analytics_mode(
+            args, msf_service, soft_service, sw_guide_service, os_guide_service
+        )
+    elif args.command == "search":
         asyncio.run(
             handle_search_ingestion(
                 args=args,

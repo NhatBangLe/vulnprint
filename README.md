@@ -133,10 +133,10 @@ AI_MODEL=llama3
 
 ### Generate Intelligence & Build Blueprints
 
-Execute a targeted query against the framework engine:
+Execute a targeted query against the Metasploit RPC engine to ingest modules and generate lab manuals:
 
 ```bash
-python src/main.py --search "type:exploit platform:linux date:2025"
+python src/main.py search "type:exploit platform:linux" --limit 5
 ```
 
 ### View Technology Analytics Dashboard
@@ -144,7 +144,9 @@ python src/main.py --search "type:exploit platform:linux date:2025"
 Display statistical distribution breakdowns, exploit rank spreads, and VM guideline coverage/consolidation stats from the SQLite ledger:
 
 ```bash
-python src/main.py --analytics
+python src/main.py db analytics
+# or shortcut:
+python src/main.py analytics
 ```
 
 ### Export VM Guidelines
@@ -153,10 +155,13 @@ Export a specific guideline to a Markdown file using its unique **VM ID** (found
 
 ```bash
 # Export using unique VM ID:
-python src/main.py --export-guide 1 --export reports/tomcat_guide.md
+python src/main.py export guide 1 -o reports/tomcat_guide.md
 
 # Export using Metasploit module path:
-python src/main.py --export-guide "exploit/multi/http/tomcat_mgr_deploy" --export reports/tomcat_mgr_guide.md
+python src/main.py export guide "exploit/multi/http/tomcat_mgr_deploy" -o reports/tomcat_mgr_guide.md
+
+# Export consolidated guideline by OS Guideline ID:
+python src/main.py export os 1 -o reports/os_guide.md
 ```
 
 ### Filter and Search Local Database
@@ -165,10 +170,20 @@ Search local vulnerability profiles with wildcard support and filter by target p
 
 ```bash
 # General wildcard search:
-python src/main.py --search-db "apache*"
+python src/main.py db search "apache*"
 
 # Wildcard search with OS and exploit rank filters, and export results:
-python src/main.py --search-db "apache*" --platform "linux" --rank "excellent" --export reports/apache_linux_excellent.txt
+python src/main.py db search "apache*" --platform "linux" --rank "excellent" -o reports/apache_linux_excellent.txt
+```
+
+### View Software Catalog & Summary
+
+```bash
+# List all software cataloged in local database:
+python src/main.py db list
+
+# View summary breakdown of technology counts:
+python src/main.py db summary
 ```
 
 ### Review Guidelines Interactively
@@ -176,7 +191,7 @@ python src/main.py --search-db "apache*" --platform "linux" --rank "excellent" -
 Review, modify, approve, or reject unverified guidelines saved in the database:
 
 ```bash
-python src/main.py --review
+python src/main.py review
 ```
 
 ### Access Your Lab Manuals
