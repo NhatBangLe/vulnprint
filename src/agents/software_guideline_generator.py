@@ -32,8 +32,8 @@ class SoftwareGuidelineGeneratorAgent:
         ai_api_key: str,
         ai_model: str,
         tools: Optional[List[BaseTool]] = None,
-        max_tool_calls: int = 5,
-        temperature: float = 0.4,
+        max_tool_calls: Optional[int] = None,
+        temperature: Optional[float] = None,
     ):
         self.msf_service = msf_service
         self.soft_service = soft_service

@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     )
     ai_model: str = Field(validation_alias="AI_MODEL")
     ai_api_key: Optional[str] = Field(None, validation_alias="AI_API_KEY")
+    ai_model_temperature: Optional[float] = Field(
+        None, validation_alias="AI_MODEL_TEMPERATURE"
+    )
 
     blueprints_dir: str = Field(
         "vulnprint_blueprints", validation_alias="BLUEPRINTS_DIR"
@@ -29,7 +32,9 @@ class Settings(BaseSettings):
     mcp_search_url: str = Field(
         "http://localhost:8000/mcp", validation_alias="MCP_SEARCH_URL"
     )
-    mcp_max_tool_calls: int = Field(5, validation_alias="MCP_MAX_TOOL_CALLS")
+    mcp_max_tool_calls: Optional[int] = Field(
+        None, validation_alias="MCP_MAX_TOOL_CALLS"
+    )
 
     model_config = SettingsConfigDict(
         env_file=ENV_FILE_PATH, env_file_encoding="utf-8", extra="ignore"

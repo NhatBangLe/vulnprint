@@ -776,9 +776,11 @@ async def handle_search_ingestion(
 
     extractor = VulnerabilityTargetExtractorAgent(
         tools=tools,
+        max_tool_calls=settings.mcp_max_tool_calls,
         ai_base_url=settings.ai_base_url,
         ai_api_key=settings.ai_api_key,
         ai_model=settings.ai_model,
+        temperature=settings.ai_model_temperature,
     )
     os_guideline_generator_agent = OSGuidelineGeneratorAgent(
         msf_service=msf_service,
@@ -793,6 +795,7 @@ async def handle_search_ingestion(
         ai_model=settings.ai_model,
         tools=tools,
         max_tool_calls=settings.mcp_max_tool_calls,
+        temperature=settings.ai_model_temperature,
     )
 
     # Initialize blueprint service

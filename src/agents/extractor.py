@@ -96,8 +96,8 @@ class VulnerabilityTargetExtractorAgent:
         ai_api_key: str,
         ai_model: str,
         tools: Optional[List[BaseTool]] = None,
-        max_tool_calls: int = 5,
-        temperature: float = 0.4,
+        max_tool_calls: Optional[int] = None,
+        temperature: Optional[float] = None,
     ):
         self.ai_base_url = ai_base_url
         self.ai_api_key = ai_api_key
