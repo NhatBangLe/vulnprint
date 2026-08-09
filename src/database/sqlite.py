@@ -1,6 +1,7 @@
 import sqlite3
 import logging
 from .base import DatabaseManager
+import os
 
 
 class SQLiteDatabaseManager(DatabaseManager):
@@ -13,6 +14,10 @@ class SQLiteDatabaseManager(DatabaseManager):
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def get_connection(self) -> sqlite3.Connection:
+        # Ensure directory exists
+        db_dir = os.path.dirname(self.db_path)
+        if db_dir:
+            os.makedirs(db_dir, exist_ok=True)
         return sqlite3.connect(self.db_path)
 
     def initialize_schema(self) -> None:
