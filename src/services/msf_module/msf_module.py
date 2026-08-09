@@ -80,6 +80,7 @@ class DefaultMSFModuleService(MSFModuleService):
         min_date: Optional[str] = None,
         max_date: Optional[str] = None,
         msf_path: Optional[str] = None,
+        no_guideline: bool = False,
     ) -> List[Tuple[MSFModule, Optional[Software]]]:
         joined_records = self.msf_repo.search_modules(
             software_pattern=software_pattern,
@@ -88,6 +89,7 @@ class DefaultMSFModuleService(MSFModuleService):
             min_date=min_date,
             max_date=max_date,
             msf_path=msf_path,
+            no_guideline=no_guideline,
         )
         results = []
         for m_rec, s_rec in joined_records:

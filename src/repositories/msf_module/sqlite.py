@@ -293,6 +293,7 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
         min_date: Optional[str] = None,
         max_date: Optional[str] = None,
         msf_path: Optional[str] = None,
+        no_guideline: bool = False,
     ) -> List[Tuple[MSFModuleRecord, Optional[SoftwareRecord]]]:
         conn = None
         try:
@@ -348,6 +349,8 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
                     sql_msf_path = f"%{msf_path}%"
                 query += " AND m.path LIKE ?"
                 params.append(sql_msf_path)
+            if no_guideline:
+                query += " AND NOT EXISTS (SELECT 1 FROM module_guidelines mg WHERE mg.module_path = m.path)"
 
             query += " ORDER BY s.name ASC, m.rank DESC"
             cursor.execute(query, tuple(params))

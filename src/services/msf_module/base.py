@@ -84,6 +84,7 @@ class MSFModuleService(ABC):
         min_date: Optional[str] = None,
         max_date: Optional[str] = None,
         msf_path: Optional[str] = None,
+        no_guideline: bool = False,
     ) -> List[Tuple[MSFModule, Optional[Software]]]:
         """
         Searches modules and returns their details as domain models.

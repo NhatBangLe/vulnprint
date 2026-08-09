@@ -38,9 +38,10 @@ class AnalyticsService(ABC):
         min_date: Optional[str] = None,
         max_date: Optional[str] = None,
         msf_path: Optional[str] = None,
+        no_guideline: bool = False,
         export_path: Optional[str] = None,
     ) -> None:
         """
-        Displays wildcard search results with optional platform, rank, date, and msf_path filters.
+        Displays wildcard search results with optional platform, rank, date, msf_path, and no_guideline filters.
         """
         pass

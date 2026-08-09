@@ -195,6 +195,13 @@ examples:
         help="Filter search results by Metasploit module path (pattern matching supported, e.g. 'cve', 'exploit/multi/*')",
     )
     db_search_parser.add_argument(
+        "--no-guideline",
+        "--missing-guideline",
+        action="store_true",
+        dest="no_guideline",
+        help="Filter search results to show only modules without any software guideline",
+    )
+    db_search_parser.add_argument(
         "-o",
         "--output",
         "--export",
@@ -354,6 +361,7 @@ examples:
         max_date=getattr(args, "max_date", None),
         sort_date=getattr(args, "sort_date", None),
         msf_path=getattr(args, "msf_path", None),
+        no_guideline=getattr(args, "no_guideline", False),
     )
 
 
@@ -747,6 +755,7 @@ def handle_analytics_mode(
             min_date=args.min_date,
             max_date=args.max_date,
             msf_path=args.msf_path,
+            no_guideline=args.no_guideline,
             export_path=args.output,
         )
 

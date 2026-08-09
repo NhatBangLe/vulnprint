@@ -90,6 +90,7 @@ class MSFModuleRepository(ABC):
         min_date: Optional[str] = None,
         max_date: Optional[str] = None,
         msf_path: Optional[str] = None,
+        no_guideline: bool = False,
     ) -> List[Tuple[MSFModuleRecord, Optional[SoftwareRecord]]]:
         """
         Searches modules joining software and guideline tables.

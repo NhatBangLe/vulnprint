@@ -346,10 +346,11 @@ class CLIAnalyticsService(AnalyticsService):
         min_date: Optional[str] = None,
         max_date: Optional[str] = None,
         msf_path: Optional[str] = None,
+        no_guideline: bool = False,
         export_path: Optional[str] = None,
     ) -> None:
         """
-        Displays wildcard search results with optional platform, rank, date, and msf_path filters.
+        Displays wildcard search results with optional platform, rank, date, msf_path, and no_guideline filters.
         """
         try:
             search_results = self.msf_service.search_modules(
@@ -359,6 +360,7 @@ class CLIAnalyticsService(AnalyticsService):
                 min_date=min_date,
                 max_date=max_date,
                 msf_path=msf_path,
+                no_guideline=no_guideline,
             )
             buf = OutputBuffer(export_path)
 
@@ -379,6 +381,8 @@ class CLIAnalyticsService(AnalyticsService):
                 filters.append(f"Max Date: '{max_date}'")
             if msf_path:
                 filters.append(f"MSF Path: '{msf_path}'")
+            if no_guideline:
+                filters.append("Missing Guideline: True")
 
             if filters:
                 buf.write(f" Active Filters: {', '.join(filters)}")
