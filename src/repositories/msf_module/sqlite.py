@@ -290,6 +290,9 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
         software_pattern: Optional[str] = None,
         platform: Optional[str] = None,
         rank: Optional[str] = None,
+        min_date: Optional[str] = None,
+        max_date: Optional[str] = None,
+        msf_path: Optional[str] = None,
     ) -> List[Tuple[MSFModuleRecord, Optional[SoftwareRecord]]]:
         conn = None
         try:
@@ -332,6 +335,19 @@ class SQLiteMSFModuleRepository(MSFModuleRepository):
             if rank:
                 query += " AND m.rank LIKE ?"
                 params.append(f"%{rank}%")
+            if min_date:
+                query += " AND m.disclosure_date >= ?"
+                params.append(min_date)
+            if max_date:
+                query += " AND m.disclosure_date <= ?"
+                params.append(max_date)
+            if msf_path:
+                if "*" in msf_path or "%" in msf_path:
+                    sql_msf_path = msf_path.replace("*", "%")
+                else:
+                    sql_msf_path = f"%{msf_path}%"
+                query += " AND m.path LIKE ?"
+                params.append(sql_msf_path)
 
             query += " ORDER BY s.name ASC, m.rank DESC"
             cursor.execute(query, tuple(params))

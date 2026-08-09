@@ -161,6 +161,8 @@ examples:
     )
     db_search_parser.add_argument(
         "pattern",
+        nargs="?",
+        default=None,
         type=str,
         help="Wildcard search pattern for software (e.g. 'apache*')",
     )
@@ -175,6 +177,22 @@ examples:
         "--rank",
         type=str,
         help="Filter search results by exploit reliability rank (e.g. excellent, great)",
+    )
+    db_search_parser.add_argument(
+        "--min-date",
+        type=validate_date_format,
+        help="Filter search results by minimum disclosure date (YYYY-MM-DD)",
+    )
+    db_search_parser.add_argument(
+        "--max-date",
+        type=validate_date_format,
+        help="Filter search results by maximum disclosure date (YYYY-MM-DD)",
+    )
+    db_search_parser.add_argument(
+        "-m",
+        "--msf-path",
+        type=str,
+        help="Filter search results by Metasploit module path (pattern matching supported, e.g. 'cve', 'exploit/multi/*')",
     )
     db_search_parser.add_argument(
         "-o",
@@ -335,6 +353,7 @@ examples:
         min_date=getattr(args, "min_date", None),
         max_date=getattr(args, "max_date", None),
         sort_date=getattr(args, "sort_date", None),
+        msf_path=getattr(args, "msf_path", None),
     )
 
 
@@ -725,6 +744,9 @@ def handle_analytics_mode(
             software_pattern=args.pattern,
             platform=args.platform,
             rank=args.rank,
+            min_date=args.min_date,
+            max_date=args.max_date,
+            msf_path=args.msf_path,
             export_path=args.output,
         )
 

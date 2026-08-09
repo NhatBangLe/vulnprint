@@ -16,3 +16,4 @@ class CLIArguments(BaseModel):
     min_date: Optional[str] = None
     max_date: Optional[str] = None
     sort_date: Optional[str] = None
+    msf_path: Optional[str] = None

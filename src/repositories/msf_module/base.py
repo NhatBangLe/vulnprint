@@ -87,6 +87,9 @@ class MSFModuleRepository(ABC):
         software_pattern: Optional[str] = None,
         platform: Optional[str] = None,
         rank: Optional[str] = None,
+        min_date: Optional[str] = None,
+        max_date: Optional[str] = None,
+        msf_path: Optional[str] = None,
     ) -> List[Tuple[MSFModuleRecord, Optional[SoftwareRecord]]]:
         """
         Searches modules joining software and guideline tables.

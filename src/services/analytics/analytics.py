@@ -340,17 +340,25 @@ class CLIAnalyticsService(AnalyticsService):
 
     def display_search_results(
         self,
-        software_pattern: str,
+        software_pattern: Optional[str] = None,
         platform: Optional[str] = None,
         rank: Optional[str] = None,
+        min_date: Optional[str] = None,
+        max_date: Optional[str] = None,
+        msf_path: Optional[str] = None,
         export_path: Optional[str] = None,
     ) -> None:
         """
-        Displays wildcard search results with optional platform and rank filters.
+        Displays wildcard search results with optional platform, rank, date, and msf_path filters.
         """
         try:
             search_results = self.msf_service.search_modules(
-                software_pattern=software_pattern, platform=platform, rank=rank
+                software_pattern=software_pattern,
+                platform=platform,
+                rank=rank,
+                min_date=min_date,
+                max_date=max_date,
+                msf_path=msf_path,
             )
             buf = OutputBuffer(export_path)
 
@@ -365,6 +373,12 @@ class CLIAnalyticsService(AnalyticsService):
                 filters.append(f"Platform: '{platform}'")
             if rank:
                 filters.append(f"Rank: '{rank}'")
+            if min_date:
+                filters.append(f"Min Date: '{min_date}'")
+            if max_date:
+                filters.append(f"Max Date: '{max_date}'")
+            if msf_path:
+                filters.append(f"MSF Path: '{msf_path}'")
 
             if filters:
                 buf.write(f" Active Filters: {', '.join(filters)}")

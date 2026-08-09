@@ -32,12 +32,15 @@ class AnalyticsService(ABC):
     @abstractmethod
     def display_search_results(
         self,
-        software_pattern: str,
+        software_pattern: Optional[str] = None,
         platform: Optional[str] = None,
         rank: Optional[str] = None,
+        min_date: Optional[str] = None,
+        max_date: Optional[str] = None,
+        msf_path: Optional[str] = None,
         export_path: Optional[str] = None,
     ) -> None:
         """
-        Displays wildcard search results with optional platform and rank filters.
+        Displays wildcard search results with optional platform, rank, date, and msf_path filters.
         """
         pass
