@@ -4,7 +4,7 @@ import sys
 import argparse
 import os
 import logging
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 from models import CLIArguments, GuidelineStatus, Software
 from repositories import (
     SQLiteMSFModuleRepository,
@@ -33,7 +33,7 @@ from agents import (
     SoftwareGuidelineGeneratorAgent,
 )
 from config import settings
-from utils import configure_logging, safe_print
+from utils import configure_logging, safe_print, load_msf_paths_from_file
 
 
 def validate_date_format(date_str: str) -> str:
@@ -58,6 +58,7 @@ def parse_args() -> CLIArguments:
 examples:
   # Query Metasploit framework and generate lab blueprints:
   python src/main.py search "apache tomcat" -l 5
+  python src/main.py search -f paths.jsonl -l 5
 
   # Search local database for Apache vulnerabilities:
   python src/main.py db search "apache*" -p linux -r excellent -o reports/apache_linux.txt
@@ -79,6 +80,10 @@ examples:
 
   # Export consolidated VM guideline by OS Guideline ID:
   python src/main.py export os 1 -o reports/os_guide.md
+
+  # Export all Metasploit module paths stored in local database as a JSON string array:
+  python src/main.py export msf-paths -o reports/msf_paths.json
+  python src/main.py db msf-paths
 """,
     )
 
@@ -96,13 +101,25 @@ examples:
         epilog="""
 examples:
   python src/main.py search "apache tomcat" --limit 5
+  python src/main.py search -f paths.jsonl --limit 5
   python src/main.py search "type:exploit platform:linux" --min-date 2025-01-01 --sort-date desc
 """,
     )
     search_parser.add_argument(
         "query",
         type=str,
+        nargs="?",
+        default=None,
         help="Search query term or Metasploit filter (e.g., 'apache tomcat', 'type:exploit platform:linux')",
+    )
+    search_parser.add_argument(
+        "-f",
+        "--file",
+        "--input-file",
+        "--import-file",
+        dest="input_file",
+        type=str,
+        help="File path to import Metasploit module paths (JSONL, JSON, or text format)",
     )
     search_parser.add_argument(
         "-l",
@@ -244,6 +261,21 @@ examples:
         help="File path to save software list as Markdown",
     )
 
+    # db msf-paths
+    db_paths_parser = db_subparsers.add_parser(
+        "msf-paths",
+        aliases=["paths", "msf_paths"],
+        help="Export all Metasploit module paths in current database as a JSON string array",
+    )
+    db_paths_parser.add_argument(
+        "-o",
+        "--output",
+        "--export",
+        dest="output",
+        type=str,
+        help="File path to save exported MSF paths JSON array",
+    )
+
     # -------------------------------------------------------------
     # Subcommand: analytics (shortcut for db analytics)
     # -------------------------------------------------------------
@@ -316,7 +348,7 @@ examples:
     # export os
     export_os_parser = export_subparsers.add_parser(
         "os",
-        help="Export consolidated VM installation guideline for an OS guideline ID",
+        help="Export consolidated VM installation guideline for an OS Guideline ID",
     )
     export_os_parser.add_argument(
         "os_id",
@@ -332,6 +364,21 @@ examples:
         help="File path to save exported guideline as Markdown",
     )
 
+    # export msf-paths
+    export_paths_parser = export_subparsers.add_parser(
+        "msf-paths",
+        aliases=["paths", "msf_paths"],
+        help="Export all Metasploit module paths in current database as a JSON string array",
+    )
+    export_paths_parser.add_argument(
+        "-o",
+        "--output",
+        "--export",
+        dest="output",
+        type=str,
+        help="File path to save exported MSF paths JSON array",
+    )
+
     args = parser.parse_args()
 
     if not args.command:
@@ -345,6 +392,13 @@ examples:
     if args.command == "export" and not args.subcommand:
         export_parser.print_help()
         sys.exit(0)
+
+    if (
+        args.command == "search"
+        and not args.query
+        and not getattr(args, "input_file", None)
+    ):
+        search_parser.error("Either query or -f/--input-file must be provided.")
 
     return CLIArguments(
         command=args.command,
@@ -362,6 +416,7 @@ examples:
         sort_date=getattr(args, "sort_date", None),
         msf_path=getattr(args, "msf_path", None),
         no_guideline=getattr(args, "no_guideline", False),
+        input_file=getattr(args, "input_file", None),
     )
 
 
@@ -758,6 +813,13 @@ def handle_analytics_mode(
             no_guideline=args.no_guideline,
             export_path=args.output,
         )
+    elif (
+        args.command == "db" and args.subcommand in ["msf-paths", "paths", "msf_paths"]
+    ) or (
+        args.command == "export"
+        and args.subcommand in ["msf-paths", "paths", "msf_paths"]
+    ):
+        analytics_service.display_msf_paths(export_path=args.output)
 
 
 async def handle_search_ingestion(
@@ -840,17 +902,27 @@ async def handle_search_ingestion(
         software_guideline_generator_agent=software_guideline_generator_agent,
     )
 
-    logger.info(f"Executing search query: '{args.query}'")
-    module_paths = metasploit_service.search_modules(
-        args.query,
-        min_date=args.min_date,
-        max_date=args.max_date,
-        sort_by_date=args.sort_date,
-    )
+    module_paths: List[str] = []
+    if args.input_file:
+        logger.info(f"Loading MSF module paths from file: '{args.input_file}'")
+        module_paths = load_msf_paths_from_file(args.input_file)
+        if args.query:
+            logger.info(f"Filtering loaded paths with query: '{args.query}'")
+            query_lower = args.query.lower()
+            module_paths = [p for p in module_paths if query_lower in p.lower()]
+    elif args.query:
+        logger.info(f"Executing search query: '{args.query}'")
+        module_paths = metasploit_service.search_modules(
+            args.query,
+            min_date=args.min_date,
+            max_date=args.max_date,
+            sort_by_date=args.sort_date,
+        )
+
     if not module_paths:
-        logger.warning("No exploit modules matched the search query.")
+        logger.warning("No exploit modules matched or imported.")
         return
-    logger.info(f"Found {len(module_paths)} matching exploit modules.")
+    logger.info(f"Found/imported {len(module_paths)} Metasploit module path(s).")
 
     # Apply module cap limit
     if args.limit and args.limit > 0:
@@ -960,6 +1032,10 @@ def main():
                 export_guideline_by_os_id=str(args.os_id),
                 export_file_path=args.output,
                 logger=logger,
+            )
+        elif args.subcommand in ["msf-paths", "paths", "msf_paths"]:
+            handle_analytics_mode(
+                args, msf_service, soft_service, sw_guide_service, os_guide_service
             )
     elif args.command in ["db", "analytics"]:
         handle_analytics_mode(

@@ -130,6 +130,9 @@ Query Metasploit RPC for matching modules, parse technical specs using LLM, and 
 # Basic keyword search with result limit:
 python src/main.py search "apache tomcat" --limit 5
 
+# Import MSF module paths from a JSONL or JSON file:
+python src/main.py search -f paths.jsonl --limit 5
+
 # Search with Metasploit search filter syntax and date filters:
 python src/main.py search "type:exploit platform:linux" --min-date 2024-01-01 --sort-date desc
 ```
@@ -181,6 +184,9 @@ python src/main.py export guide "exploit/multi/http/tomcat_mgr_deploy" -o report
 
 # Export OS base guideline by OS ID:
 python src/main.py export os 1 -o reports/os_guide.md
+
+# Export all Metasploit module paths in current database as a JSON string array:
+python src/main.py export msf-paths -o reports/msf_paths.json
 ```
 
 ### 6. Access Generated Lab Manuals

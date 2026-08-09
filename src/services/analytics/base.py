@@ -45,3 +45,11 @@ class AnalyticsService(ABC):
         Displays wildcard search results with optional platform, rank, date, msf_path, and no_guideline filters.
         """
         pass
+
+    @abstractmethod
+    def display_msf_paths(self, export_path: Optional[str] = None) -> None:
+        """
+        Displays and exports a JSON array of all Metasploit module paths in the current database.
+        """
+        pass
+

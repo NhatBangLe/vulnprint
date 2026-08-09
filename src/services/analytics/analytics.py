@@ -429,3 +429,29 @@ class CLIAnalyticsService(AnalyticsService):
             buf.save()
         except Exception as e:
             self._logger.error(f"Error displaying search results: {e}")
+
+    def display_msf_paths(self, export_path: Optional[str] = None) -> None:
+        """
+        Displays and exports a JSON array of all Metasploit module paths in the current database.
+        """
+        try:
+            import json
+            import os
+
+            msf_paths = self.msf_service.get_all_paths()
+            json_output = json.dumps(msf_paths, indent=2)
+
+            safe_print(json_output)
+
+            if export_path:
+                export_dir = os.path.dirname(export_path)
+                if export_dir and not os.path.exists(export_dir):
+                    os.makedirs(export_dir, exist_ok=True)
+                with open(export_path, "w", encoding="utf-8") as f:
+                    f.write(json_output + "\n")
+                self._logger.info(
+                    f"Successfully exported {len(msf_paths)} MSF paths to: {export_path}"
+                )
+        except Exception as e:
+            self._logger.error(f"Error displaying MSF paths: {e}")
+

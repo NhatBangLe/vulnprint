@@ -18,3 +18,5 @@ class CLIArguments(BaseModel):
     sort_date: Optional[str] = None
     msf_path: Optional[str] = None
     no_guideline: bool = False
+    input_file: Optional[str] = None
+
