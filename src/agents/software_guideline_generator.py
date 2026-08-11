@@ -121,7 +121,11 @@ class SoftwareGuidelineGeneratorAgent:
                 f"Vulnerable Versions: {versions_str}\n"
                 f"Required Configurations: {configs_str}\n"
                 "IMPORTANT: DO NOT MENTION the OS installation instructions in the guideline. "
-                "JUST PROVIDE the software installation instructions and configurations"
+                "JUST PROVIDE the software installation instructions and configurations.\n\n"
+                "Try considering the testing section in the detailed documentation if available for "
+                "guidance on the software installation.\n\n"
+                "HERE IS THE METASPLOIT DETAILED DOCUMENTATION:"
+                f"{msf_module.documentation}"
             )
 
             result = await self.agent.ainvoke(
