@@ -123,7 +123,7 @@ class CLIAnalyticsService(AnalyticsService):
                     f" {'Rank':<5}{'OS Guide ID':<13}{'OS Environment Setup':<24}{'Covered':<10}{'Efficiency':<20}"
                 )
                 print("-" * 75)
-                for idx, item in enumerate(vm_coverage.os_guidelines[:5], 1):
+                for idx, item in enumerate(vm_coverage.os_guidelines, 1):
                     clean_os = self._clean_string(item.os_name)
                     display_os = (
                         clean_os[:22] + ".." if len(clean_os) > 22 else clean_os
