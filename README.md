@@ -207,3 +207,9 @@ When configured with a local LLM server (such as Ollama or LocalAI), Vulnprint p
 ## 📄 License
 
 This project is licensed under the [MIT License](LICENSE.md).
+
+---
+
+## Note
+
+Evaluation modules and their benchmark results are provided in the `evaluation_data/` directory.
