@@ -6,6 +6,40 @@ It connects to a live Metasploit RPC daemon (`msfrpcd`), extracts module details
 
 ---
 
+## 🔬 Paper & Evaluation Reproduction
+
+This project is the implementation accompanying our paper:
+> **"Vulnprint: Automated Lab Blueprint Generation with LLM Agents for Exploit Reproduction from Metasploit Modules"**
+
+### Reproducing the Evaluation
+
+The benchmark dataset evaluated in the paper is stored in [`evaluation_data/msf_paths.json`](evaluation_data/msf_paths.json), which contains the list of Metasploit module paths evaluated in the study.
+
+To reproduce the evaluation pipeline:
+
+1. **Start Metasploit RPC Daemon**:
+   Ensure `msfrpcd` is running (see [Installation & Setup](#-installation--setup) for setup details):
+   ```bash
+   msfrpcd -f -P <your_rpc_password>
+   ```
+
+2. **Run Vulnprint Evaluation Batch**:
+   Execute `search` using the `-f` flag pointing to `evaluation_data/msf_paths.json`:
+   ```bash
+   python src/main.py search -f evaluation_data/msf_paths.json
+   ```
+   This processes all benchmark modules through Vulnprint's extraction and blueprint generation pipeline.
+
+3. **Verify Results**:
+   View database analytics or compare the generated output with the baseline results:
+   - In Vietnamese: [`evaluation_data/evaluation_result.xlsx`](evaluation_data/evaluation_result.xlsx)
+   - In English: [`evaluation_data/evaluation_result_en.xlsx`](evaluation_data/evaluation_result_en.xlsx)
+   ```bash
+   python src/main.py db analytics
+   ```
+
+---
+
 ## 🎯 Overview & Problem Solved
 
 - **The Problem:** Setting up vulnerable test environments manually requires reading unstructured write-ups, identifying specific software versions, and guessing required configuration settings.
@@ -207,9 +241,3 @@ When configured with a local LLM server (such as Ollama or LocalAI), Vulnprint p
 ## 📄 License
 
 This project is licensed under the [MIT License](LICENSE.md).
-
----
-
-## Note
-
-Evaluation modules and their benchmark results are provided in the `evaluation_data/` directory.
