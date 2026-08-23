@@ -39,7 +39,7 @@ class DefaultMSFModuleService(MSFModuleService):
                 type=data.type,
                 rank=data.rank,
                 disclosure_date=data.disclosure_date,
-                platforms=data.platform,
+                platforms=data.platforms,
                 documentation=data.documentation,
                 description=data.description,
             )

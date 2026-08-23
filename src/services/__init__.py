@@ -9,6 +9,7 @@ from .vm_guideline.vm_guideline import DefaultVMGuidelineService
 from .blueprint import BlueprintService, MarkdownBlueprintService
 from .analytics import CLIAnalyticsService
 from .metasploit import MetasploitService, MetasploitRPCService
+from .agent_trace import AgentTraceService, DefaultAgentTraceService
 
 
 __all__ = [
@@ -27,4 +28,6 @@ __all__ = [
     "MetasploitRPCService",
     "VMGuidelineService",
     "DefaultVMGuidelineService",
+    "AgentTraceService",
+    "DefaultAgentTraceService",
 ]

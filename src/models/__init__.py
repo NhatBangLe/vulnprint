@@ -13,6 +13,8 @@ from .domain import (
     TargetSystem,
     MinimalVMGuidelineItem,
     MinimalVMGuidelinesCoverage,
+    AgentTrace,
+    FailedModuleSummary,
 )
 from .records import (
     MSFModuleRecord,
@@ -20,6 +22,7 @@ from .records import (
     OSGuidelineRecord,
     SoftwareGuidelineRecord,
     TargetSystemRecord,
+    AgentTraceRecord,
 )
 from .metasploit import MetasploitModuleDetails
 
@@ -39,9 +42,12 @@ __all__ = [
     "OSGuidelineRecord",
     "SoftwareGuidelineRecord",
     "TargetSystemRecord",
+    "AgentTraceRecord",
     "MSFModule",
     "Software",
     "TargetSystem",
     "MinimalVMGuidelineItem",
     "MinimalVMGuidelinesCoverage",
+    "AgentTrace",
+    "FailedModuleSummary",
 ]

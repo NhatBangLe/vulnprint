@@ -9,6 +9,10 @@ from services import (
     OSGuidelineService,
     VMGuidelineService,
 )
+from typing import Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from services.agent_trace import AgentTraceService
 from utils import OutputBuffer, safe_print
 
 
@@ -25,12 +29,14 @@ class CLIAnalyticsService(AnalyticsService):
         sw_guide_service: SoftwareGuidelineService,
         os_guide_service: OSGuidelineService,
         vm_guide_service: VMGuidelineService,
+        trace_service: Optional["AgentTraceService"] = None,
     ):
         self.msf_service = msf_service
         self.soft_service = soft_service
         self.sw_guide_service = sw_guide_service
         self.os_guide_service = os_guide_service
         self.vm_guide_service = vm_guide_service
+        self.trace_service = trace_service
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def _clean_string(self, text: str) -> str:
@@ -455,3 +461,112 @@ class CLIAnalyticsService(AnalyticsService):
         except Exception as e:
             self._logger.error(f"Error displaying MSF paths: {e}")
 
+    def display_failure_report(
+        self,
+        pattern: Optional[str] = None,
+        platform: Optional[str] = None,
+        agent: Optional[str] = None,
+        error_category: Optional[str] = None,
+        verbose: bool = False,
+        export_path: Optional[str] = None,
+    ) -> None:
+        """
+        Displays a filtered report of failed agent executions with root causes and diagnostics.
+        """
+        if not self.trace_service:
+            self._logger.warning("TraceService is not configured.")
+            return
+
+        try:
+            failures = self.trace_service.get_failed_modules(
+                pattern=pattern,
+                platform=platform,
+                agent=agent,
+                error_category=error_category,
+            )
+
+            buf = OutputBuffer(export_path=export_path)
+            buf.write("\n" + "=" * 80)
+            buf.write(f"{'[ FAILED AGENT EXECUTIONS & ROOT CAUSE REPORT ]':^80}")
+            buf.write("=" * 80)
+
+            filters_applied = []
+            if pattern:
+                filters_applied.append(f"Pattern: '{pattern}'")
+            if platform:
+                filters_applied.append(f"Platform: '{platform}'")
+            if agent:
+                filters_applied.append(f"Agent: '{agent}'")
+            if error_category:
+                filters_applied.append(f"Category: '{error_category}'")
+
+            filter_str = (
+                " | ".join(filters_applied)
+                if filters_applied
+                else "None (All Failures)"
+            )
+            buf.write(f" Filter Criteria : {filter_str}")
+            buf.write(f" Total Failures  : {len(failures)}")
+            buf.write("-" * 80)
+
+            if not failures:
+                buf.write(
+                    " No failed agent execution traces match the specified criteria."
+                )
+                buf.write("=" * 80 + "\n")
+                buf.save()
+                return
+
+            for idx, item in enumerate(failures, 1):
+                buf.write(f" [{idx}/{len(failures)}] ❌ {item.msf_path}")
+                if item.display_name:
+                    buf.write(
+                        f"       Title       : {self._clean_string(item.display_name)}"
+                    )
+                if item.platforms:
+                    buf.write(f"       Platforms   : {', '.join(item.platforms)}")
+                buf.write(f"       Agent       : {item.agent_name}")
+                buf.write(
+                    f"       Failed Step : Step {item.failed_step_index} ({item.failed_step_name})"
+                )
+                buf.write(f"       Error Type  : {item.error_category}")
+                buf.write(f"       Root Cause  : {item.error_message}")
+                if item.diagnostic_hint:
+                    buf.write(f"       Diagnostic  : {item.diagnostic_hint}")
+                if item.created_at:
+                    buf.write(f"       Timestamp   : {item.created_at}")
+
+                if verbose:
+                    trace = self.trace_service.get_latest_trace_for_module(
+                        item.msf_path, item.agent_name
+                    )
+                    if trace:
+                        buf.write(
+                            "\n" + trace.format_visual_box(use_color=False) + "\n"
+                        )
+                buf.write("-" * 80)
+
+            buf.write("=" * 80 + "\n")
+            buf.save()
+        except Exception as e:
+            self._logger.error(f"Error displaying failure report: {e}")
+
+    def display_trace(self, msf_path: str) -> None:
+        """
+        Displays the stored visual execution trace box for a specific MSF module path.
+        """
+        if not self.trace_service:
+            self._logger.warning("TraceService is not configured.")
+            return
+
+        try:
+            trace = self.trace_service.get_latest_trace_for_module(msf_path)
+            if not trace:
+                safe_print(
+                    f"\nNo stored agent execution trace found for module '{msf_path}'.\n"
+                )
+                return
+
+            safe_print("\n" + trace.format_visual_box(use_color=True) + "\n")
+        except Exception as e:
+            self._logger.error(f"Error displaying trace for '{msf_path}': {e}")

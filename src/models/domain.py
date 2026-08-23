@@ -6,6 +6,7 @@ from .records import (
     SoftwareGuidelineRecord,
     MSFModuleRecord,
     SoftwareRecord,
+    AgentTraceRecord,
 )
 
 
@@ -317,3 +318,49 @@ class MinimalVMGuidelinesCoverage(BaseModel):
     minimal_os_guidelines_count: int
     os_guidelines: List[MinimalVMGuidelineItem]
 
+
+class AgentTrace(BaseModel):
+    id: Optional[int] = None
+    msf_path: str
+    agent_name: str
+    status: str = "SUCCESS"
+    failed_step_name: Optional[str] = None
+    failed_step_index: Optional[int] = None
+    error_category: Optional[str] = None
+    error_message: Optional[str] = None
+    diagnostic_hint: Optional[str] = None
+    duration_seconds: Optional[float] = None
+    trace_json: Optional[str] = None
+    created_at: Optional[str] = None
+
+    @classmethod
+    def from_record(cls, record: "AgentTraceRecord") -> "AgentTrace":
+        return cls(
+            id=record.id,
+            msf_path=record.msf_path,
+            agent_name=record.agent_name,
+            status=record.status,
+            failed_step_name=record.failed_step_name,
+            failed_step_index=record.failed_step_index,
+            error_category=record.error_category,
+            error_message=record.error_message,
+            diagnostic_hint=record.diagnostic_hint,
+            duration_seconds=record.duration_seconds,
+            trace_json=record.trace_json,
+            created_at=record.created_at,
+        )
+
+
+class FailedModuleSummary(BaseModel):
+    msf_path: str
+    display_name: str = ""
+    platforms: List[str] = Field(default_factory=list)
+    agent_name: str
+    status: str = "FAILED"
+    failed_step_name: str = "Unknown"
+    failed_step_index: int = 0
+    error_category: str = "ExecutionError"
+    error_message: str = ""
+    diagnostic_hint: Optional[str] = None
+    duration_seconds: Optional[float] = None
+    created_at: Optional[str] = None

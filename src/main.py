@@ -12,6 +12,7 @@ from repositories import (
     SQLiteOSGuidelineRepository,
     SQLiteSoftwareGuidelineRepository,
     SQLiteTargetSystemRepository,
+    SQLiteAgentTraceRepository,
 )
 from database import SQLiteDatabaseManager
 from services import (
@@ -22,10 +23,12 @@ from services import (
     SoftwareService,
     MarkdownBlueprintService,
     CLIAnalyticsService,
+    AgentTraceService,
     DefaultMSFModuleService,
     DefaultSoftwareService,
     DefaultOSGuidelineService,
     DefaultSoftwareGuidelineService,
+    DefaultAgentTraceService,
 )
 from agents import (
     VulnerabilityTargetExtractorAgent,
@@ -276,6 +279,66 @@ examples:
         help="File path to save exported MSF paths JSON array",
     )
 
+    # db failures
+    db_failures_parser = db_subparsers.add_parser(
+        "failures",
+        aliases=["errors", "failed"],
+        help="Filter and inspect failed agent executions, root causes, and diagnostics",
+    )
+    db_failures_parser.add_argument(
+        "pattern",
+        nargs="?",
+        default=None,
+        type=str,
+        help="Wildcard search pattern for MSF module path or title (e.g. 'apache*')",
+    )
+    db_failures_parser.add_argument(
+        "-p",
+        "--platform",
+        type=str,
+        help="Filter failure results by target OS platform (e.g. linux, windows)",
+    )
+    db_failures_parser.add_argument(
+        "-a",
+        "--agent",
+        type=str,
+        help="Filter failure results by agent name (e.g. ExtractorAgent)",
+    )
+    db_failures_parser.add_argument(
+        "-c",
+        "--category",
+        "--error-type",
+        dest="error_category",
+        type=str,
+        help="Filter failure results by error category (e.g. AgentResponseParsingError, AgentLLMInvocationError)",
+    )
+    db_failures_parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        dest="verbose_trace",
+        help="Display full visual step execution trace box for each failure",
+    )
+    db_failures_parser.add_argument(
+        "-o",
+        "--output",
+        "--export",
+        dest="output",
+        type=str,
+        help="File path to save failure report as Markdown/text",
+    )
+
+    # db trace
+    db_trace_parser = db_subparsers.add_parser(
+        "trace",
+        help="Display stored visual step execution trace for a specific Metasploit module path",
+    )
+    db_trace_parser.add_argument(
+        "trace_path",
+        type=str,
+        help="Metasploit module path to inspect trace (e.g. 'exploit/multi/http/wp_acf_extended_rce')",
+    )
+
     # -------------------------------------------------------------
     # Subcommand: analytics (shortcut for db analytics)
     # -------------------------------------------------------------
@@ -417,6 +480,10 @@ examples:
         msf_path=getattr(args, "msf_path", None),
         no_guideline=getattr(args, "no_guideline", False),
         input_file=getattr(args, "input_file", None),
+        agent=getattr(args, "agent", None),
+        error_category=getattr(args, "error_category", None),
+        verbose_trace=getattr(args, "verbose_trace", False),
+        trace_path=getattr(args, "trace_path", None),
     )
 
 
@@ -427,6 +494,7 @@ def setup_database_and_services(
     SoftwareService,
     OSGuidelineService,
     SoftwareGuidelineService,
+    AgentTraceService,
 ]:
     # Initialize database schema using DatabaseManager
     db_manager = SQLiteDatabaseManager(db_path=db_path)
@@ -438,6 +506,7 @@ def setup_database_and_services(
     os_guide_repo = SQLiteOSGuidelineRepository(db_manager=db_manager)
     sw_guide_repo = SQLiteSoftwareGuidelineRepository(db_manager=db_manager)
     target_system_repo = SQLiteTargetSystemRepository(db_manager=db_manager)
+    agent_trace_repo = SQLiteAgentTraceRepository(db_manager=db_manager)
 
     # Wrap repositories in Domain Services
     msf_service = DefaultMSFModuleService(
@@ -450,8 +519,15 @@ def setup_database_and_services(
         os_guide_repo=os_guide_repo, target_system_repo=target_system_repo
     )
     sw_guide_service = DefaultSoftwareGuidelineService(sw_guide_repo=sw_guide_repo)
+    agent_trace_service = DefaultAgentTraceService(trace_repo=agent_trace_repo)
 
-    return msf_service, soft_service, os_guide_service, sw_guide_service
+    return (
+        msf_service,
+        soft_service,
+        os_guide_service,
+        sw_guide_service,
+        agent_trace_service,
+    )
 
 
 def handle_review_mode(
@@ -780,6 +856,7 @@ def handle_analytics_mode(
     soft_service: SoftwareService,
     sw_guide_service: SoftwareGuidelineService,
     os_guide_service: OSGuidelineService,
+    agent_trace_service: Optional[AgentTraceService] = None,
 ) -> None:
     from services import DefaultVMGuidelineService
 
@@ -793,6 +870,7 @@ def handle_analytics_mode(
         sw_guide_service=sw_guide_service,
         os_guide_service=os_guide_service,
         vm_guide_service=vm_guide_service,
+        trace_service=agent_trace_service,
     )
     if args.command == "db" and args.subcommand == "summary":
         analytics_service.display_dashboard()
@@ -820,6 +898,23 @@ def handle_analytics_mode(
         and args.subcommand in ["msf-paths", "paths", "msf_paths"]
     ):
         analytics_service.display_msf_paths(export_path=args.output)
+    elif args.command == "db" and args.subcommand in ["failures", "errors", "failed"]:
+        analytics_service.display_failure_report(
+            pattern=args.pattern,
+            platform=args.platform,
+            agent=args.agent,
+            error_category=args.error_category,
+            verbose=args.verbose_trace,
+            export_path=args.output,
+        )
+    elif args.command == "db" and args.subcommand == "trace":
+        target_path = args.trace_path or args.pattern or args.target
+        if not target_path:
+            safe_print(
+                "\nPlease specify a Metasploit module path (e.g. 'exploit/multi/http/wp_acf_extended_rce').\n"
+            )
+        else:
+            analytics_service.display_trace(target_path)
 
 
 async def handle_search_ingestion(
@@ -828,6 +923,7 @@ async def handle_search_ingestion(
     soft_service: SoftwareService,
     os_guide_service: OSGuidelineService,
     sw_guide_service: SoftwareGuidelineService,
+    agent_trace_service: AgentTraceService,
     logger: logging.Logger,
 ) -> None:
     if not settings.msf_rpc_password:
@@ -848,7 +944,9 @@ async def handle_search_ingestion(
     )
     try:
         metasploit_service.connect()
-    except Exception:
+        logger.info(f"Successfully authenticated with Metasploit Framework RPC Daemon.")
+    except Exception as e:
+        logger.error(f"Failed to connect to Metasploit RPC Daemon: {e}")
         sys.exit(1)
 
     # Initialize agents
@@ -900,6 +998,7 @@ async def handle_search_ingestion(
         sw_guide_service=sw_guide_service,
         os_guideline_generator_agent=os_guideline_generator_agent,
         software_guideline_generator_agent=software_guideline_generator_agent,
+        trace_service=agent_trace_service,
     )
 
     module_paths: List[str] = []
@@ -937,35 +1036,41 @@ async def handle_search_ingestion(
 
         # Fetch module details from Metasploit
         module_details = metasploit_service.get_module_details(path)
-        desc = module_details.description
-        if not desc or len(desc.strip()) == 0:
-            logger.warning(
-                f"[{idx}/{len(module_paths)}] Module description is empty. Skipping model analysis."
-            )
-        else:
-            logger.info(
-                f"[{idx}/{len(module_paths)}] Interrogating AI model ({settings.ai_model}) to extract software metadata..."
-            )
-            vuln_target = await extractor.extract(
-                description=desc,
-                documentation=module_details.documentation,
-                cves=module_details.cves,
-                msf_path=path,
-                msf_module_name=module_details.module_name,
-                target_platforms=module_details.platform,
-            )
 
-            if vuln_target is None:
-                logger.warning(
-                    f"[{idx}/{len(module_paths)}] Failed to extract software metadata. Skipping..."
-                )
-                continue
+        # Guaranteed module registration in database
+        msf_service.store_module(module_details)
 
         logger.info(
-            f"[{idx}/{len(module_paths)}] Recording intelligence in database ledger..."
+            f"[{idx}/{len(module_paths)}] Interrogating AI model ({settings.ai_model}) to extract software metadata..."
+        )
+        vuln_target = await extractor.extract(
+            description=module_details.description,
+            documentation=module_details.documentation,
+            cves=module_details.cves,
+            msf_path=path,
+            msf_module_name=module_details.module_name,
+            target_platforms=module_details.platform,
         )
 
-        msf_service.store_module(module_details)
+        # Persist extractor agent trace
+        if extractor.last_trace:
+            agent_trace_service.record_trace(extractor.last_trace, path)
+
+        if vuln_target is None:
+            failed_info = (
+                f"at Step {extractor.last_trace.failed_step.index} ('{extractor.last_trace.failed_step.name}'): {extractor.last_trace.failed_step.error_message}"
+                if extractor.last_trace and extractor.last_trace.failed_step
+                else "metadata extraction returned no result"
+            )
+            logger.error(
+                f"[{idx}/{len(module_paths)}] Failed to extract software metadata ({failed_info}). Skipping..."
+            )
+            continue
+
+        logger.info(
+            f"[{idx}/{len(module_paths)}] Storing software details in database ledger..."
+        )
+
         soft_service.store_software(
             Software(
                 path=path,
@@ -1006,10 +1111,14 @@ def main():
     args = parse_args()
 
     logger.info("Initializing database and services...")
-    msf_service, soft_service, os_guide_service, sw_guide_service = (
-        setup_database_and_services(
-            db_path=settings.database_path,
-        )
+    (
+        msf_service,
+        soft_service,
+        os_guide_service,
+        sw_guide_service,
+        agent_trace_service,
+    ) = setup_database_and_services(
+        db_path=settings.database_path,
     )
 
     # Route based on command/subcommand
@@ -1035,11 +1144,21 @@ def main():
             )
         elif args.subcommand in ["msf-paths", "paths", "msf_paths"]:
             handle_analytics_mode(
-                args, msf_service, soft_service, sw_guide_service, os_guide_service
+                args,
+                msf_service,
+                soft_service,
+                sw_guide_service,
+                os_guide_service,
+                agent_trace_service,
             )
     elif args.command in ["db", "analytics"]:
         handle_analytics_mode(
-            args, msf_service, soft_service, sw_guide_service, os_guide_service
+            args,
+            msf_service,
+            soft_service,
+            sw_guide_service,
+            os_guide_service,
+            agent_trace_service,
         )
     elif args.command == "search":
         asyncio.run(
@@ -1049,6 +1168,7 @@ def main():
                 soft_service=soft_service,
                 os_guide_service=os_guide_service,
                 sw_guide_service=sw_guide_service,
+                agent_trace_service=agent_trace_service,
                 logger=logger,
             )
         )

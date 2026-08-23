@@ -1,9 +1,11 @@
-from utils import handle_validation_error
+from utils import (
+    handle_validation_error,
+)
 from pydantic import ValidationError
 import os
 import logging
 import json
-from typing import Optional, List
+from typing import Optional, List, TYPE_CHECKING
 from .base import BlueprintService
 from services import (
     MSFModuleService,
@@ -12,7 +14,11 @@ from services import (
     SoftwareGuidelineService,
 )
 from models import GuidelineStatus, Software
-from agents import OSGuidelineGeneratorAgent, SoftwareGuidelineGeneratorAgent
+
+if TYPE_CHECKING:
+    from agents.os_guideline_generator import OSGuidelineGeneratorAgent
+    from agents.software_guideline_generator import SoftwareGuidelineGeneratorAgent
+    from services.agent_trace import AgentTraceService
 
 
 class MarkdownBlueprintService(BlueprintService):
@@ -26,8 +32,9 @@ class MarkdownBlueprintService(BlueprintService):
         soft_service: SoftwareService,
         os_guide_service: OSGuidelineService,
         sw_guide_service: SoftwareGuidelineService,
-        os_guideline_generator_agent: OSGuidelineGeneratorAgent,
-        software_guideline_generator_agent: SoftwareGuidelineGeneratorAgent,
+        os_guideline_generator_agent: "OSGuidelineGeneratorAgent",
+        software_guideline_generator_agent: "SoftwareGuidelineGeneratorAgent",
+        trace_service: Optional["AgentTraceService"] = None,
         output_dir: str = "vulnprint_blueprints/",
     ):
         self.msf_service = msf_service
@@ -37,13 +44,16 @@ class MarkdownBlueprintService(BlueprintService):
         self.sw_guide_service = sw_guide_service
         self.os_guideline_generator_agent = os_guideline_generator_agent
         self.software_guideline_generator_agent = software_guideline_generator_agent
+        self.trace_service = trace_service
         self._logger = logging.getLogger(self.__class__.__name__)
 
     async def generate_blueprint(self, msf_path: str) -> Optional[str]:
         try:
             msf_module = self.msf_service.get_module_by_path(msf_path)
             if not msf_module:
-                self._logger.error(f"Module path '{msf_path}' not found.")
+                self._logger.error(
+                    f"Blueprint generation failed: Module path '{msf_path}' not found in database."
+                )
                 return None
 
             software = self.soft_service.get_software_by_path(msf_path)
@@ -127,9 +137,12 @@ class MarkdownBlueprintService(BlueprintService):
                     self._logger.info(
                         f"Re-using OS guideline ID {os_guideline_id} ({os_guide.os_name}). Generating software guideline..."
                     )
-                    sw_guide = await self.software_guideline_generator_agent.generate(
-                        msf_path, os_guideline_id
+                    sw_result = await self.software_guideline_generator_agent.generate_with_trace(
+                        msf_path=msf_path, os_guideline_id=os_guideline_id
                     )
+                    if self.trace_service and sw_result.trace:
+                        self.trace_service.record_trace(sw_result.trace, msf_path)
+                    sw_guide = sw_result.data
                     if sw_guide:
                         sw_guide.os_guideline_ids = [os_guideline_id] + [
                             g[1].id
@@ -153,14 +166,24 @@ class MarkdownBlueprintService(BlueprintService):
                         data["os_name"] = os_guide.os_name
                         data["software_guideline"] = sw_guide.guideline
                     else:
+                        fail_reason = (
+                            f"Failed at step '{sw_result.trace.failed_step.name}': {sw_result.trace.failed_step.error_message}"
+                            if sw_result.trace and sw_result.trace.failed_step
+                            else "Agent returned no data"
+                        )
                         self._logger.error(
-                            f"Failed to generate software guideline for {msf_path} using reused OS guideline ID {os_guideline_id}."
+                            f"Failed to generate software guideline for {msf_path} using reused OS guideline ID {os_guideline_id}. Reason: {fail_reason}"
                         )
                 else:
                     self._logger.warning(
                         f"No suitable OS guideline found in database for {msf_path}. Regenerating OS guideline using AI Agent..."
                     )
-                    os_guide = self.os_guideline_generator_agent.generate(msf_path)
+                    os_result = self.os_guideline_generator_agent.generate_with_trace(
+                        msf_path
+                    )
+                    if self.trace_service and os_result.trace:
+                        self.trace_service.record_trace(os_result.trace, msf_path)
+                    os_guide = os_result.data
                     if os_guide:
                         # 1. Store OS Guideline and get its ID
                         os_guideline_id = self.os_guide_service.store_os_guideline(
@@ -172,9 +195,12 @@ class MarkdownBlueprintService(BlueprintService):
                             )
 
                         # 2. Generate software guideline using the new OS guideline ID
-                        sw_guide = await self.software_guideline_generator_agent.generate(
-                            msf_path, os_guideline_id
+                        sw_result = await self.software_guideline_generator_agent.generate_with_trace(
+                            msf_path=msf_path, os_guideline_id=os_guideline_id
                         )
+                        if self.trace_service and sw_result.trace:
+                            self.trace_service.record_trace(sw_result.trace, msf_path)
+                        sw_guide = sw_result.data
                         if sw_guide:
                             sw_guide.os_guideline_ids = [os_guideline_id]
                             sw_guide.software_id = (
@@ -195,12 +221,22 @@ class MarkdownBlueprintService(BlueprintService):
                             data["os_name"] = os_guide.os_name
                             data["software_guideline"] = sw_guide.guideline
                         else:
+                            fail_reason = (
+                                f"Failed at step '{sw_result.trace.failed_step.name}': {sw_result.trace.failed_step.error_message}"
+                                if sw_result.trace and sw_result.trace.failed_step
+                                else "Agent returned no data"
+                            )
                             self._logger.error(
-                                f"Failed to generate software guideline for {msf_path}."
+                                f"Failed to generate software guideline for {msf_path}. Reason: {fail_reason}"
                             )
                     else:
+                        fail_reason = (
+                            f"Failed at step '{os_result.trace.failed_step.name}': {os_result.trace.failed_step.error_message}"
+                            if os_result.trace and os_result.trace.failed_step
+                            else "Agent returned no data"
+                        )
                         self._logger.error(
-                            f"Failed to generate OS guideline for {msf_path}. Using fallback instructions."
+                            f"Failed to generate OS guideline for {msf_path}. Reason: {fail_reason}. Using fallback instructions."
                         )
 
             # Build the exact template layout required

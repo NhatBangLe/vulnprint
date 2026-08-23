@@ -58,3 +58,18 @@ class SoftwareGuidelineRecord(BaseModel):
     status: str = "UNVERIFIED"
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
+
+
+class AgentTraceRecord(BaseModel):
+    id: Optional[int] = None
+    msf_path: str
+    agent_name: str
+    status: str = "SUCCESS"  # 'SUCCESS' or 'FAILED'
+    failed_step_name: Optional[str] = None
+    failed_step_index: Optional[int] = None
+    error_category: Optional[str] = None
+    error_message: Optional[str] = None
+    diagnostic_hint: Optional[str] = None
+    duration_seconds: Optional[float] = None
+    trace_json: Optional[str] = None
+    created_at: Optional[str] = None

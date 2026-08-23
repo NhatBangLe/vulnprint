@@ -13,6 +13,9 @@ from .software_guideline.sqlite import SQLiteSoftwareGuidelineRepository
 from .target_system.base import TargetSystemRepository
 from .target_system.sqlite import SQLiteTargetSystemRepository
 
+from .agent_trace.base import AgentTraceRepository
+from .agent_trace.sqlite import SQLiteAgentTraceRepository
+
 
 __all__ = [
     "MSFModuleRepository",
@@ -25,4 +28,6 @@ __all__ = [
     "SQLiteSoftwareGuidelineRepository",
     "TargetSystemRepository",
     "SQLiteTargetSystemRepository",
+    "AgentTraceRepository",
+    "SQLiteAgentTraceRepository",
 ]

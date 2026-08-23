@@ -145,6 +145,33 @@ class SQLiteDatabaseManager(DatabaseManager):
             """
             )
 
+            # agent_traces table
+            cursor.execute(
+                """
+            CREATE TABLE IF NOT EXISTS agent_traces (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                msf_path TEXT NOT NULL,
+                agent_name TEXT NOT NULL,
+                status TEXT NOT NULL,
+                failed_step_name TEXT,
+                failed_step_index INTEGER,
+                error_category TEXT,
+                error_message TEXT,
+                diagnostic_hint TEXT,
+                duration_seconds REAL,
+                trace_json TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (msf_path) REFERENCES msf_modules(path) ON DELETE CASCADE
+            );
+            """
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_agent_traces_path ON agent_traces(msf_path);"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_agent_traces_status ON agent_traces(status);"
+            )
+
             conn.commit()
             conn.close()
             self._logger.info("Database schema initialized successfully.")

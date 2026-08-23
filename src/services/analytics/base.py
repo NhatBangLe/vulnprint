@@ -53,3 +53,24 @@ class AnalyticsService(ABC):
         """
         pass
 
+    @abstractmethod
+    def display_failure_report(
+        self,
+        pattern: Optional[str] = None,
+        platform: Optional[str] = None,
+        agent: Optional[str] = None,
+        error_category: Optional[str] = None,
+        verbose: bool = False,
+        export_path: Optional[str] = None,
+    ) -> None:
+        """
+        Displays a filtered report of failed agent executions with root causes and diagnostics.
+        """
+        pass
+
+    @abstractmethod
+    def display_trace(self, msf_path: str) -> None:
+        """
+        Displays the stored visual execution trace box for a specific MSF module path.
+        """
+        pass

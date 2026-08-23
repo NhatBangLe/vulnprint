@@ -1,84 +1,119 @@
 import logging
-from typing import Optional
-from services import MSFModuleService, SoftwareService
+from typing import Optional, TYPE_CHECKING
 from models import OSGuideline, GuidelineStatus
+from utils import (
+    format_validation_error_details,
+    AgentExecutionError,
+    AgentPreconditionError,
+    AgentSchemaValidationError,
+    AgentStepTracker,
+    AgentExecutionTrace,
+    AgentResult,
+)
+from pydantic import ValidationError
+
+if TYPE_CHECKING:
+    from services.msf_module import MSFModuleService
+    from services.software import SoftwareService
 
 
-# class OSGuidelineGeneratorResult(BaseModel):
-#     os_guideline: str = Field(
-#         ...,
-#         description=(
-#             "A detailed step-by-step Operating System Installation Guideline, including VM requirements, "
-#             "download sources (if available), and OS setup steps in markdown format. "
-#             "Crucially, this MUST NOT mention "
-#             "the specific Metasploit module, target software, CVEs, or software-specific details, "
-#             "as it will be re-used across other modules on the same platform."
-#         ),
-#     )
+EXPECTED_OS_GUIDELINE_STEPS = [
+    "Entity Verification & Preconditions",
+    "OS Specification Parsing",
+    "OS Guideline Construction & Status Assignment",
+]
 
 
 class OSGuidelineGeneratorAgent:
     def __init__(
         self,
-        msf_service: MSFModuleService,
-        soft_service: SoftwareService,
-        # ai_base_url: str,
-        # ai_api_key: str,
-        # ai_model: str,
-        # tools: Optional[List[BaseTool]] = None,
-        # max_tool_calls: int = 5,
-        # temperature: float = 0.4,
+        msf_service: "MSFModuleService",
+        soft_service: "SoftwareService",
     ):
         self.msf_service = msf_service
         self.soft_service = soft_service
-
-        # self.ai_base_url = ai_base_url
-        # self.ai_api_key = ai_api_key
-        # self.ai_model = ai_model
-
-        # self.max_tool_calls = max_tool_calls
-        # self.tools = tools
-
-        # self.agent = create_agent(
-        #     debug=True,
-        #     name="OS Guideline Generator Agent",
-        #     model=ChatOpenAI(
-        #         base_url=self.ai_base_url,
-        #         api_key=self.ai_api_key,
-        #         model=self.ai_model,
-        #         temperature=temperature,
-        #     ),
-        #     middleware=[ToolCallLimitMiddleware(run_limit=self.max_tool_calls)],
-        #     tools=self.tools,
-        #     system_prompt=(
-        #         "You are an agentic cybersecurity lab setup engineer. "
-        #         "Your goal is to search the web using the provided tools to locate operating system installation instructions "
-        #         "and virtual machine setup steps for the specified target OS. "
-        #         "Compile a highly practical Operating System installation guide (for base VM setup) in markdown format. "
-        #         "Crucially, the OS guideline (os_guideline) must be completely generic for the OS and platform, and MUST NOT "
-        #         "contain any references to the specific Metasploit module path, software name, version, or CVEs, so that it can be re-used."
-        #         "DO NOT MENTION the software, CVEs or any software-specific details in the guideline."
-        #     ),
-        #     response_format=OSGuidelineGeneratorResult,
-        # )
         self._logger = logging.getLogger(self.__class__.__name__)
+        self.last_trace: Optional[AgentExecutionTrace] = None
 
-    def generate(self, msf_path: str) -> Optional[OSGuideline]:
-        # self._logger.info(
-        #     f"Starting agentic OS guideline generation workflow for module: {msf_path}"
-        # )
+    def generate_with_trace(
+        self,
+        msf_path: str,
+        raise_on_error: bool = False,
+    ) -> AgentResult[OSGuideline]:
+        """
+        Executes OS guideline generation with complete step-by-step traceability.
+        Returns an AgentResult containing data, full execution trace, and any error.
+        """
+        tracker = AgentStepTracker(
+            agent_name=self.__class__.__name__,
+            target_identifier=msf_path,
+            expected_steps=EXPECTED_OS_GUIDELINE_STEPS,
+        )
+        self.last_trace = tracker.trace
+
+        # Step 1: Entity Verification & Preconditions
+        current_step = EXPECTED_OS_GUIDELINE_STEPS[0]
+        tracker.start_step(current_step, metadata={"msf_path": msf_path})
 
         msf_module = self.msf_service.get_module_by_path(msf_path)
         if not msf_module:
-            self._logger.error(f"Module not found in database: {msf_path}")
-            return None
+            err_msg = f"Metasploit module '{msf_path}' not found in database."
+            hint = "Ingest the Metasploit module details into the database first."
+            tracker.fail_step(
+                name=current_step,
+                error=err_msg,
+                error_category="AgentPreconditionError",
+                diagnostic_hint=hint,
+            )
+            self._logger.error(tracker.trace.format_visual_box())
+            error = AgentPreconditionError(
+                message=err_msg,
+                agent_name=self.__class__.__name__,
+                step_name=current_step,
+                step_index=1,
+                diagnostic_hint=hint,
+                trace=tracker.trace,
+            )
+            if raise_on_error:
+                raise error
+            return AgentResult(data=None, trace=tracker.trace, error=error)
 
         software = self.soft_service.get_software_by_path(msf_path)
         if not software:
-            self._logger.error(f"Software not found in database: {msf_path}")
-            return None
+            err_msg = f"Software record not found in database for path: '{msf_path}'."
+            hint = "Run vulnerability target extraction to identify the software and target OS before generating OS guidelines."
+            tracker.fail_step(
+                name=current_step,
+                error=err_msg,
+                error_category="AgentPreconditionError",
+                diagnostic_hint=hint,
+            )
+            self._logger.error(tracker.trace.format_visual_box())
+            error = AgentPreconditionError(
+                message=err_msg,
+                agent_name=self.__class__.__name__,
+                step_name=current_step,
+                step_index=1,
+                diagnostic_hint=hint,
+                trace=tracker.trace,
+            )
+            if raise_on_error:
+                raise error
+            return AgentResult(data=None, trace=tracker.trace, error=error)
 
-        # Reconstruct OS name from software target system properties
+        tracker.complete_step(
+            current_step,
+            metadata={
+                "platform": software.platform,
+                "distribution": software.distribution,
+                "version": software.version,
+                "architecture": software.architecture,
+            },
+        )
+
+        # Step 2: OS Specification Parsing
+        current_step = EXPECTED_OS_GUIDELINE_STEPS[1]
+        tracker.start_step(current_step)
         parts = []
         if software.distribution:
             parts.append(software.distribution)
@@ -89,9 +124,13 @@ class OSGuidelineGeneratorAgent:
         if software.architecture:
             parts.append(f"({software.architecture})")
         os_name = " ".join(parts)
+        tracker.complete_step(current_step, metadata={"resolved_os_name": os_name})
 
+        # Step 3: OS Guideline Construction & Status Assignment
+        current_step = EXPECTED_OS_GUIDELINE_STEPS[2]
+        tracker.start_step(current_step)
         try:
-            return OSGuideline(
+            os_guideline = OSGuideline(
                 guideline=f"Install the base operating system: {os_name}.",
                 platform=software.platform,
                 distribution=software.distribution,
@@ -99,6 +138,61 @@ class OSGuidelineGeneratorAgent:
                 architecture=software.architecture,
                 status=GuidelineStatus.VERIFIED,
             )
+            tracker.complete_step(
+                current_step,
+                metadata={"status": os_guideline.status.value},
+            )
+            tracker.finish(success=True)
+            return AgentResult(data=os_guideline, trace=tracker.trace, error=None)
+        except ValidationError as e:
+            details = format_validation_error_details(e)
+            tracker.fail_step(
+                name=current_step,
+                error=details,
+                error_category="AgentSchemaValidationError",
+                diagnostic_hint="OSGuideline domain model constraints were violated.",
+            )
+            self._logger.error(tracker.trace.format_visual_box())
+            error = AgentSchemaValidationError(
+                message=details,
+                agent_name=self.__class__.__name__,
+                step_name=current_step,
+                step_index=3,
+                trace=tracker.trace,
+            )
+            if raise_on_error:
+                raise error
+            return AgentResult(data=None, trace=tracker.trace, error=error)
         except Exception as e:
-            self._logger.error(f"Error during OS guideline generation: {e}")
-            return None
+            err_msg = f"Error during OS guideline generation: {e}"
+            tracker.fail_step(
+                name=current_step,
+                error=e,
+                error_category="AgentExecutionError",
+            )
+            self._logger.error(tracker.trace.format_visual_box())
+            error = AgentExecutionError(
+                message=err_msg,
+                agent_name=self.__class__.__name__,
+                step_name=current_step,
+                step_index=3,
+                trace=tracker.trace,
+            )
+            if raise_on_error:
+                raise error
+            return AgentResult(data=None, trace=tracker.trace, error=error)
+
+    def generate(
+        self,
+        msf_path: str,
+        raise_on_error: bool = False,
+    ) -> Optional[OSGuideline]:
+        """
+        Generates base OS setup instructions.
+        Maintains backward compatibility while preserving full step traceability in self.last_trace.
+        """
+        result = self.generate_with_trace(
+            msf_path=msf_path,
+            raise_on_error=raise_on_error,
+        )
+        return result.data

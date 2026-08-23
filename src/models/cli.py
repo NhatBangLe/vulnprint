@@ -19,4 +19,7 @@ class CLIArguments(BaseModel):
     msf_path: Optional[str] = None
     no_guideline: bool = False
     input_file: Optional[str] = None
-
+    agent: Optional[str] = None
+    error_category: Optional[str] = None
+    verbose_trace: bool = False
+    trace_path: Optional[str] = None
