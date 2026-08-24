@@ -31,9 +31,7 @@ To reproduce the evaluation pipeline:
    This processes all benchmark modules through Vulnprint's extraction and blueprint generation pipeline.
 
 3. **Verify Results**:
-   View database analytics or compare the generated output with the baseline results:
-   - In Vietnamese: [`evaluation_data/evaluation_result.xlsx`](evaluation_data/evaluation_result.xlsx)
-   - In English: [`evaluation_data/evaluation_result_en.xlsx`](evaluation_data/evaluation_result_en.xlsx)
+   View database analytics:
    ```bash
    python src/main.py db analytics
    ```
