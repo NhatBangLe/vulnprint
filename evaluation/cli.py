@@ -27,7 +27,6 @@ if __package__ is None or __package__ == "":
     from evaluation.config_manager import (
         EvaluationConfig,
         RunMetadata,
-        SystemInfo,
         ModelConfig,
         MetasploitConfig,
         MCPConfig,
@@ -35,7 +34,6 @@ if __package__ is None or __package__ == "":
         OutputConfig,
         capture_system_info,
         export_config_to_json,
-        load_config_from_json,
     )
 else:
     from .runner import EvaluationRunner
@@ -43,7 +41,6 @@ else:
     from .config_manager import (
         EvaluationConfig,
         RunMetadata,
-        SystemInfo,
         ModelConfig,
         MetasploitConfig,
         MCPConfig,
@@ -51,7 +48,6 @@ else:
         OutputConfig,
         capture_system_info,
         export_config_to_json,
-        load_config_from_json,
     )
 
 
@@ -187,6 +183,12 @@ Examples:
         "--msf-password",
         type=str,
         help="Override Metasploit RPC password",
+    )
+    run_parser.add_argument(
+        "--msf-version",
+        type=str,
+        default=None,
+        help="Optional Metasploit Framework version (e.g. '6.4.15') for tracking purpose",
     )
 
     # MCP Search overrides
@@ -348,6 +350,7 @@ def handle_export_config_template(output_path: str):
         metasploit=MetasploitConfig(
             host="127.0.0.1",
             port=55553,
+            version="6.5.3-dev",
             password_configured=True,
         ),
         mcp=MCPConfig(
@@ -394,6 +397,7 @@ def main():
             msf_host=args.msf_host,
             msf_port=args.msf_port,
             msf_password=args.msf_password,
+            msf_version=args.msf_version,
             mcp_url=args.mcp_url,
             mcp_max_calls=args.mcp_max_calls,
             base_output_dir=args.output_dir,

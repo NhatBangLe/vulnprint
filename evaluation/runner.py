@@ -92,6 +92,7 @@ class EvaluationRunner:
         msf_host: Optional[str] = None,
         msf_port: Optional[int] = None,
         msf_password: Optional[str] = None,
+        msf_version: Optional[str] = None,
         # MCP overrides
         mcp_url: Optional[str] = None,
         mcp_max_calls: Optional[int] = None,
@@ -286,6 +287,7 @@ class EvaluationRunner:
             metasploit=MetasploitConfig(
                 host=effective_msf_host,
                 port=effective_msf_port,
+                version=msf_version,
                 password_configured=has_msf_pass,
                 password_raw=(
                     proc_env.get("MSF_RPC_PASSWORD") if export_secrets else None
@@ -394,6 +396,7 @@ class EvaluationRunner:
             msf_host=config.metasploit.host,
             msf_port=config.metasploit.port,
             msf_password=config.metasploit.password_raw,
+            msf_version=config.metasploit.version,
             mcp_url=config.mcp.search_url,
             mcp_max_calls=config.mcp.max_tool_calls,
             base_output_dir=base_output_dir,

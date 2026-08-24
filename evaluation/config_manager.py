@@ -69,6 +69,9 @@ class MetasploitConfig(BaseModel):
 
     host: str = Field("127.0.0.1", description="Metasploit RPC daemon host")
     port: int = Field(55553, description="Metasploit RPC daemon port", ge=1, le=65535)
+    version: Optional[str] = Field(
+        None, description="Metasploit Framework version (optional, provided by user)"
+    )
     password_configured: bool = Field(
         False, description="Whether MSF RPC password was provided/configured"
     )

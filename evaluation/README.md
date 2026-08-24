@@ -89,6 +89,7 @@ python evaluation/cli.py export-config -o config.template.json
 | `--ai-temperature` | Sampling temperature (`0.0` - `2.0`) | From env / settings |
 | `--ai-api-key` | AI API key override | From env / settings |
 | `--msf-host`, `--msf-port`, `--msf-password` | Metasploit RPC daemon overrides | `127.0.0.1:55553` |
+| `--msf-version` | Optional Metasploit version string for tracking purpose (e.g. `6.4.15`) | `None` |
 | `--mcp-url`, `--mcp-max-calls` | MCP search server overrides | `http://localhost:8000/mcp` |
 | `-o`, `--output-dir` | Base directory for runs | `evaluation/runs` |
 | `--run-name` | Specific turn name | Auto-incremented `run_001`... |
@@ -146,6 +147,7 @@ All configuration data is validated by **Pydantic**:
   "metasploit": {
     "host": "127.0.0.1",
     "port": 55553,
+    "version": "6.4.15",
     "password_configured": true,
     "password_raw": null
   },
