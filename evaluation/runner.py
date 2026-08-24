@@ -77,7 +77,7 @@ class EvaluationRunner:
     def run_evaluation(
         self,
         # Task options
-        input_file: Optional[str] = "evaluation_data/msf_paths.json",
+        input_file: Optional[str] = None,
         query: Optional[str] = None,
         limit: Optional[int] = None,
         min_date: Optional[str] = None,

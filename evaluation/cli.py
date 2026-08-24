@@ -112,7 +112,7 @@ Examples:
         "--input-file",
         dest="input_file",
         type=str,
-        default="evaluation_data/msf_paths.json",
+        default=None,
         help="Path to input dataset file (JSON array, JSONL, or text list of MSF module paths). Default: evaluation_data/msf_paths.json",
     )
     run_parser.add_argument(
