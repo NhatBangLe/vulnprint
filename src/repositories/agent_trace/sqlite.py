@@ -24,8 +24,9 @@ class SQLiteAgentTraceRepository(AgentTraceRepository):
                 INSERT INTO agent_traces (
                     msf_path, agent_name, status, failed_step_name,
                     failed_step_index, error_category, error_message,
-                    diagnostic_hint, duration_seconds, trace_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                    diagnostic_hint, duration_seconds, total_tokens,
+                    prompt_tokens, completion_tokens, trace_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
                 """,
                 (
                     record.msf_path,
@@ -37,6 +38,13 @@ class SQLiteAgentTraceRepository(AgentTraceRepository):
                     record.error_message,
                     record.diagnostic_hint,
                     record.duration_seconds,
+                    record.total_tokens if record.total_tokens is not None else 0,
+                    record.prompt_tokens if record.prompt_tokens is not None else 0,
+                    (
+                        record.completion_tokens
+                        if record.completion_tokens is not None
+                        else 0
+                    ),
                     record.trace_json,
                 ),
             )
@@ -60,7 +68,8 @@ class SQLiteAgentTraceRepository(AgentTraceRepository):
                 """
                 SELECT id, msf_path, agent_name, status, failed_step_name,
                        failed_step_index, error_category, error_message,
-                       diagnostic_hint, duration_seconds, trace_json, created_at
+                       diagnostic_hint, duration_seconds, total_tokens,
+                       prompt_tokens, completion_tokens, trace_json, created_at
                 FROM agent_traces
                 WHERE msf_path = ?
                 ORDER BY id ASC;
@@ -80,8 +89,11 @@ class SQLiteAgentTraceRepository(AgentTraceRepository):
                     error_message=r[7],
                     diagnostic_hint=r[8],
                     duration_seconds=r[9],
-                    trace_json=r[10],
-                    created_at=r[11],
+                    total_tokens=r[10],
+                    prompt_tokens=r[11],
+                    completion_tokens=r[12],
+                    trace_json=r[13],
+                    created_at=r[14],
                 )
                 for r in rows
             ]
@@ -104,7 +116,8 @@ class SQLiteAgentTraceRepository(AgentTraceRepository):
                     """
                     SELECT id, msf_path, agent_name, status, failed_step_name,
                            failed_step_index, error_category, error_message,
-                           diagnostic_hint, duration_seconds, trace_json, created_at
+                           diagnostic_hint, duration_seconds, total_tokens,
+                           prompt_tokens, completion_tokens, trace_json, created_at
                     FROM agent_traces
                     WHERE msf_path = ? AND agent_name = ?
                     ORDER BY id DESC LIMIT 1;
@@ -116,7 +129,8 @@ class SQLiteAgentTraceRepository(AgentTraceRepository):
                     """
                     SELECT id, msf_path, agent_name, status, failed_step_name,
                            failed_step_index, error_category, error_message,
-                           diagnostic_hint, duration_seconds, trace_json, created_at
+                           diagnostic_hint, duration_seconds, total_tokens,
+                           prompt_tokens, completion_tokens, trace_json, created_at
                     FROM agent_traces
                     WHERE msf_path = ?
                     ORDER BY id DESC LIMIT 1;
@@ -137,8 +151,11 @@ class SQLiteAgentTraceRepository(AgentTraceRepository):
                 error_message=r[7],
                 diagnostic_hint=r[8],
                 duration_seconds=r[9],
-                trace_json=r[10],
-                created_at=r[11],
+                total_tokens=r[10],
+                prompt_tokens=r[11],
+                completion_tokens=r[12],
+                trace_json=r[13],
+                created_at=r[14],
             )
         except Exception as e:
             self._logger.error(
@@ -166,7 +183,8 @@ class SQLiteAgentTraceRepository(AgentTraceRepository):
                 SELECT 
                     t.id, t.msf_path, t.agent_name, t.status, t.failed_step_name,
                     t.failed_step_index, t.error_category, t.error_message,
-                    t.diagnostic_hint, t.duration_seconds, t.trace_json, t.created_at,
+                    t.diagnostic_hint, t.duration_seconds, t.total_tokens,
+                    t.prompt_tokens, t.completion_tokens, t.trace_json, t.created_at,
                     m.id AS m_id, m.display_name, m.type, m.rank, m.disclosure_date,
                     (SELECT group_concat(mp.platform) FROM module_platforms mp WHERE mp.module_path = m.path) AS platforms,
                     m.documentation, m.description
@@ -216,26 +234,28 @@ class SQLiteAgentTraceRepository(AgentTraceRepository):
                     error_message=r[7],
                     diagnostic_hint=r[8],
                     duration_seconds=r[9],
-                    trace_json=r[10],
-                    created_at=r[11],
+                    total_tokens=r[10],
+                    prompt_tokens=r[11],
+                    completion_tokens=r[12],
+                    trace_json=r[13],
+                    created_at=r[14],
                 )
                 module_rec = None
-                if r[12] is not None:
-                    plat_str = r[17] or ""
+                if r[15] is not None:
+                    plat_str = r[20] or ""
                     platforms = [p.strip() for p in plat_str.split(",") if p.strip()]
                     module_rec = MSFModuleRecord(
-                        id=r[12],
+                        id=r[15],
                         path=r[1],
-                        display_name=r[13] or "",
-                        type=r[14] or "",
-                        rank=r[15] or "",
-                        disclosure_date=r[16] or "",
+                        display_name=r[16] or "",
+                        type=r[17] or "",
+                        rank=r[18] or "",
+                        disclosure_date=r[19] or "",
                         platforms=platforms,
-                        documentation=r[18] or "",
-                        description=r[19] or "",
+                        documentation=r[21] or "",
+                        description=r[22] or "",
                     )
                 results.append((trace_rec, module_rec))
-
             return results
         except Exception as e:
             self._logger.error(f"Error querying failed agent traces: {e}")

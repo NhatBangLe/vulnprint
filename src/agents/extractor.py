@@ -9,6 +9,7 @@ from utils import (
     AgentStepTracker,
     AgentExecutionTrace,
     AgentResult,
+    extract_token_usage_from_result,
 )
 from typing import Optional, List, Literal
 import logging
@@ -268,13 +269,18 @@ class VulnerabilityTargetExtractorAgent:
             result = await self.agent.ainvoke(
                 {"messages": [{"role": "user", "content": user_content}]},
             )
+            step_usage = extract_token_usage_from_result(result)
             tracker.complete_step(
                 current_step,
                 metadata={
                     "response_keys": (
                         list(result.keys()) if isinstance(result, dict) else []
-                    )
+                    ),
+                    "prompt_tokens": step_usage.prompt_tokens,
+                    "completion_tokens": step_usage.completion_tokens,
+                    "total_tokens": step_usage.total_tokens,
                 },
+                token_usage=step_usage,
             )
         except ValidationError as e:
             details = format_validation_error_details(e)

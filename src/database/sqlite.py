@@ -159,6 +159,9 @@ class SQLiteDatabaseManager(DatabaseManager):
                 error_message TEXT,
                 diagnostic_hint TEXT,
                 duration_seconds REAL,
+                total_tokens INTEGER DEFAULT 0,
+                prompt_tokens INTEGER DEFAULT 0,
+                completion_tokens INTEGER DEFAULT 0,
                 trace_json TEXT,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (msf_path) REFERENCES msf_modules(path) ON DELETE CASCADE

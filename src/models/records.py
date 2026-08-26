@@ -71,5 +71,8 @@ class AgentTraceRecord(BaseModel):
     error_message: Optional[str] = None
     diagnostic_hint: Optional[str] = None
     duration_seconds: Optional[float] = None
+    total_tokens: Optional[int] = None
+    prompt_tokens: Optional[int] = None
+    completion_tokens: Optional[int] = None
     trace_json: Optional[str] = None
     created_at: Optional[str] = None

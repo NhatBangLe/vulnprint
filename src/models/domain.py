@@ -330,6 +330,9 @@ class AgentTrace(BaseModel):
     error_message: Optional[str] = None
     diagnostic_hint: Optional[str] = None
     duration_seconds: Optional[float] = None
+    total_tokens: Optional[int] = None
+    prompt_tokens: Optional[int] = None
+    completion_tokens: Optional[int] = None
     trace_json: Optional[str] = None
     created_at: Optional[str] = None
 
@@ -346,6 +349,9 @@ class AgentTrace(BaseModel):
             error_message=record.error_message,
             diagnostic_hint=record.diagnostic_hint,
             duration_seconds=record.duration_seconds,
+            total_tokens=record.total_tokens,
+            prompt_tokens=record.prompt_tokens,
+            completion_tokens=record.completion_tokens,
             trace_json=record.trace_json,
             created_at=record.created_at,
         )

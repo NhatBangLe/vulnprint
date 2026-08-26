@@ -28,6 +28,9 @@ class DefaultAgentTraceService(AgentTraceService):
                 error_message=failed_step.error_message if failed_step else None,
                 diagnostic_hint=failed_step.diagnostic_hint if failed_step else None,
                 duration_seconds=trace.duration_seconds,
+                total_tokens=trace.total_tokens,
+                prompt_tokens=trace.prompt_tokens,
+                completion_tokens=trace.completion_tokens,
                 trace_json=trace.to_json(),
             )
             trace_id = self.trace_repo.save(record)

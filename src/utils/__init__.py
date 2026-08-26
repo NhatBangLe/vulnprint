@@ -14,6 +14,8 @@ from .exception import (
 )
 from .agent_tracer import (
     StepStatus,
+    TokenUsage,
+    extract_token_usage_from_result,
     StepExecution,
     AgentExecutionTrace,
     AgentStepTracker,
@@ -36,6 +38,8 @@ __all__ = [
     "AgentSchemaValidationError",
     "AgentPersistenceError",
     "StepStatus",
+    "TokenUsage",
+    "extract_token_usage_from_result",
     "StepExecution",
     "AgentExecutionTrace",
     "AgentStepTracker",
