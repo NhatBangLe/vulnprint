@@ -322,3 +322,75 @@ class SQLiteAgentTraceRepository(AgentTraceRepository):
         finally:
             if conn:
                 conn.close()
+
+    def get_all_traces(
+        self,
+        pattern: Optional[str] = None,
+        agent_name: Optional[str] = None,
+        status: Optional[str] = None,
+        limit: Optional[int] = None,
+    ) -> List[AgentTraceRecord]:
+        conn = None
+        try:
+            conn = self.db_manager.get_connection()
+            cursor = conn.cursor()
+
+            query = """
+                SELECT id, msf_path, agent_name, status, failed_step_name,
+                       failed_step_index, error_category, error_message,
+                       diagnostic_hint, duration_seconds, total_tokens,
+                       prompt_tokens, completion_tokens, trace_json, created_at
+                FROM agent_traces
+                WHERE 1=1
+            """
+            params: List[Any] = []
+
+            if pattern:
+                sql_pat = pattern.replace("*", "%")
+                if not ("%" in sql_pat):
+                    sql_pat = f"%{sql_pat}%"
+                query += " AND msf_path LIKE ?"
+                params.append(sql_pat)
+
+            if agent_name:
+                query += " AND agent_name LIKE ?"
+                params.append(f"%{agent_name}%")
+
+            if status:
+                query += " AND UPPER(status) = ?"
+                params.append(status.upper())
+
+            query += " ORDER BY id ASC"
+
+            if limit and limit > 0:
+                query += f" LIMIT {int(limit)}"
+
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+
+            return [
+                AgentTraceRecord(
+                    id=r[0],
+                    msf_path=r[1],
+                    agent_name=r[2],
+                    status=r[3],
+                    failed_step_name=r[4],
+                    failed_step_index=r[5],
+                    error_category=r[6],
+                    error_message=r[7],
+                    diagnostic_hint=r[8],
+                    duration_seconds=r[9],
+                    total_tokens=r[10],
+                    prompt_tokens=r[11],
+                    completion_tokens=r[12],
+                    trace_json=r[13],
+                    created_at=r[14],
+                )
+                for r in rows
+            ]
+        except Exception as e:
+            self._logger.error(f"Error querying all agent traces: {e}")
+            return []
+        finally:
+            if conn:
+                conn.close()

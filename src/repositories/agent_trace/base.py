@@ -52,3 +52,16 @@ class AgentTraceRepository(ABC):
         Aggregates failure metrics across all agent runs (e.g. counts by agent, error categories).
         """
         pass
+
+    @abstractmethod
+    def get_all_traces(
+        self,
+        pattern: Optional[str] = None,
+        agent_name: Optional[str] = None,
+        status: Optional[str] = None,
+        limit: Optional[int] = None,
+    ) -> List[AgentTraceRecord]:
+        """
+        Retrieves all trace records matching optional filtering criteria.
+        """
+        pass

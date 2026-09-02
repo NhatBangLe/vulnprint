@@ -87,6 +87,10 @@ examples:
   # Export all Metasploit module paths stored in local database as a JSON string array:
   python src/main.py export msf-paths -o reports/msf_paths.json
   python src/main.py db msf-paths
+
+  # Export all agent execution traces stored in local database as a JSON file:
+  python src/main.py export traces -o reports/traces.json
+  python src/main.py db traces -o reports/traces.json
 """,
     )
 
@@ -339,6 +343,55 @@ examples:
         help="Metasploit module path to inspect trace (e.g. 'exploit/multi/http/wp_acf_extended_rce')",
     )
 
+    # db traces
+    agent_choices = [
+        "VulnerabilityTargetExtractorAgent",
+        "OSGuidelineGeneratorAgent",
+        "SoftwareGuidelineGeneratorAgent",
+    ]
+    db_traces_parser = db_subparsers.add_parser(
+        "traces",
+        aliases=["export-traces", "agent-traces", "agent_traces"],
+        help="Export all agent execution traces from current database to a JSON file",
+    )
+    db_traces_parser.add_argument(
+        "-o",
+        "--output",
+        "--export",
+        dest="output",
+        type=str,
+        help="File path to save exported traces as JSON (defaults to traces.json)",
+    )
+    db_traces_parser.add_argument(
+        "-m",
+        "--msf-path",
+        "--pattern",
+        dest="msf_path",
+        type=str,
+        help="Filter traces by Metasploit module path (wildcard matching supported, e.g. 'cve', 'exploit/linux/*')",
+    )
+    db_traces_parser.add_argument(
+        "-a",
+        "--agent",
+        type=str,
+        choices=agent_choices,
+        help="Filter traces by agent name (VulnerabilityTargetExtractorAgent, OSGuidelineGeneratorAgent, SoftwareGuidelineGeneratorAgent)",
+    )
+    db_traces_parser.add_argument(
+        "-s",
+        "--status",
+        type=str,
+        choices=["SUCCESS", "FAILED", "success", "failed"],
+        help="Filter traces by execution status ('SUCCESS' or 'FAILED')",
+    )
+    db_traces_parser.add_argument(
+        "-l",
+        "--limit",
+        type=int,
+        help="Cap the maximum number of traces to export",
+    )
+
+
     # -------------------------------------------------------------
     # Subcommand: analytics (shortcut for db analytics)
     # -------------------------------------------------------------
@@ -442,6 +495,49 @@ examples:
         help="File path to save exported MSF paths JSON array",
     )
 
+    # export traces
+    export_traces_parser = export_subparsers.add_parser(
+        "traces",
+        aliases=["trace", "agent-traces", "agent_traces"],
+        help="Export all agent execution traces from current database to a JSON file",
+    )
+    export_traces_parser.add_argument(
+        "-o",
+        "--output",
+        "--export",
+        dest="output",
+        type=str,
+        help="File path to save exported traces as JSON (defaults to traces.json)",
+    )
+    export_traces_parser.add_argument(
+        "-m",
+        "--msf-path",
+        "--pattern",
+        dest="msf_path",
+        type=str,
+        help="Filter traces by Metasploit module path (wildcard matching supported, e.g. 'cve', 'exploit/linux/*')",
+    )
+    export_traces_parser.add_argument(
+        "-a",
+        "--agent",
+        type=str,
+        choices=agent_choices,
+        help="Filter traces by agent name (VulnerabilityTargetExtractorAgent, OSGuidelineGeneratorAgent, SoftwareGuidelineGeneratorAgent)",
+    )
+    export_traces_parser.add_argument(
+        "-s",
+        "--status",
+        type=str,
+        choices=["SUCCESS", "FAILED", "success", "failed"],
+        help="Filter traces by execution status ('SUCCESS' or 'FAILED')",
+    )
+    export_traces_parser.add_argument(
+        "-l",
+        "--limit",
+        type=int,
+        help="Cap the maximum number of traces to export",
+    )
+
     args = parser.parse_args()
 
     if not args.command:
@@ -484,6 +580,7 @@ examples:
         error_category=getattr(args, "error_category", None),
         verbose_trace=getattr(args, "verbose_trace", False),
         trace_path=getattr(args, "trace_path", None),
+        status=getattr(args, "status", None),
     )
 
 
@@ -898,6 +995,21 @@ def handle_analytics_mode(
         and args.subcommand in ["msf-paths", "paths", "msf_paths"]
     ):
         analytics_service.display_msf_paths(export_path=args.output)
+    elif (
+        args.command == "db"
+        and args.subcommand in ["traces", "export-traces", "agent-traces", "agent_traces"]
+    ) or (
+        args.command == "export"
+        and args.subcommand in ["traces", "trace", "agent-traces", "agent_traces"]
+    ):
+        export_file = args.output or "traces.json"
+        analytics_service.display_traces_export(
+            export_path=export_file,
+            pattern=args.msf_path or args.pattern,
+            agent_name=args.agent,
+            status=args.status,
+            limit=args.limit,
+        )
     elif args.command == "db" and args.subcommand in ["failures", "errors", "failed"]:
         analytics_service.display_failure_report(
             pattern=args.pattern,
@@ -1142,7 +1254,15 @@ def main():
                 export_file_path=args.output,
                 logger=logger,
             )
-        elif args.subcommand in ["msf-paths", "paths", "msf_paths"]:
+        elif args.subcommand in [
+            "msf-paths",
+            "paths",
+            "msf_paths",
+            "traces",
+            "trace",
+            "agent-traces",
+            "agent_traces",
+        ]:
             handle_analytics_mode(
                 args,
                 msf_service,

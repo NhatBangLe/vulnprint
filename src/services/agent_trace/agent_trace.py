@@ -99,3 +99,33 @@ class DefaultAgentTraceService(AgentTraceService):
 
     def get_failure_stats(self) -> Dict[str, Any]:
         return self.trace_repo.get_failure_statistics()
+
+    def get_all_traces(
+        self,
+        pattern: Optional[str] = None,
+        agent_name: Optional[str] = None,
+        status: Optional[str] = None,
+        limit: Optional[int] = None,
+    ) -> List[AgentTrace]:
+        records = self.trace_repo.get_all_traces(
+            pattern=pattern,
+            agent_name=agent_name,
+            status=status,
+            limit=limit,
+        )
+        return [AgentTrace.from_record(r) for r in records]
+
+    def export_all_traces(
+        self,
+        pattern: Optional[str] = None,
+        agent_name: Optional[str] = None,
+        status: Optional[str] = None,
+        limit: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        traces = self.get_all_traces(
+            pattern=pattern,
+            agent_name=agent_name,
+            status=status,
+            limit=limit,
+        )
+        return [t.to_export_dict() for t in traces]

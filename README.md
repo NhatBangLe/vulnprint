@@ -219,6 +219,15 @@ python src/main.py export os 1 -o reports/os_guide.md
 
 # Export all Metasploit module paths in current database as a JSON string array:
 python src/main.py export msf-paths -o reports/msf_paths.json
+
+# Export all agent execution traces in current database to a JSON file:
+python src/main.py export traces -o reports/traces.json
+
+# Export filtered failed traces:
+python src/main.py export traces --status FAILED -o reports/failed_traces.json
+
+# Export traces filtered by specific agent:
+python src/main.py export traces --agent VulnerabilityTargetExtractorAgent -o reports/extractor_traces.json
 ```
 
 ### 6. Access Generated Lab Manuals

@@ -74,3 +74,17 @@ class AnalyticsService(ABC):
         Displays the stored visual execution trace box for a specific MSF module path.
         """
         pass
+
+    @abstractmethod
+    def display_traces_export(
+        self,
+        export_path: str,
+        pattern: Optional[str] = None,
+        agent_name: Optional[str] = None,
+        status: Optional[str] = None,
+        limit: Optional[int] = None,
+    ) -> None:
+        """
+        Exports agent execution traces strictly to a JSON file.
+        """
+        pass

@@ -23,3 +23,4 @@ class CLIArguments(BaseModel):
     error_category: Optional[str] = None
     verbose_trace: bool = False
     trace_path: Optional[str] = None
+    status: Optional[str] = None

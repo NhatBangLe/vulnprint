@@ -1,3 +1,5 @@
+import os
+import json
 import logging
 import re
 from typing import Optional
@@ -570,3 +572,52 @@ class CLIAnalyticsService(AnalyticsService):
             safe_print("\n" + trace.format_visual_box(use_color=True) + "\n")
         except Exception as e:
             self._logger.error(f"Error displaying trace for '{msf_path}': {e}")
+
+    def display_traces_export(
+        self,
+        export_path: str,
+        pattern: Optional[str] = None,
+        agent_name: Optional[str] = None,
+        status: Optional[str] = None,
+        limit: Optional[int] = None,
+    ) -> None:
+        """
+        Exports all agent execution traces from the database strictly to a JSON file.
+        """
+        if not self.trace_service:
+            self._logger.warning("TraceService is not configured.")
+            return
+
+        try:
+            exported_traces = self.trace_service.export_all_traces(
+                pattern=pattern,
+                agent_name=agent_name,
+                status=status,
+                limit=limit,
+            )
+
+            output_str = json.dumps(exported_traces, indent=2, ensure_ascii=False)
+
+            export_dir = os.path.dirname(export_path)
+            if export_dir and not os.path.exists(export_dir):
+                os.makedirs(export_dir, exist_ok=True)
+
+            with open(export_path, "w", encoding="utf-8") as f:
+                f.write(output_str + "\n")
+
+            total = len(exported_traces)
+            success_count = sum(
+                1 for t in exported_traces if t.get("status") == "SUCCESS"
+            )
+            failed_count = sum(
+                1 for t in exported_traces if t.get("status") == "FAILED"
+            )
+            safe_print(f"\nSuccessfully exported {total} trace(s) to: {export_path}")
+            safe_print(
+                f"  - Status breakdown : {success_count} SUCCESS, {failed_count} FAILED\n"
+            )
+            self._logger.info(
+                f"Successfully exported {total} traces to: {export_path}"
+            )
+        except Exception as e:
+            self._logger.error(f"Error exporting agent traces: {e}")

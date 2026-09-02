@@ -52,3 +52,29 @@ class AgentTraceService(ABC):
         Aggregates agent execution health and failure statistics.
         """
         pass
+
+    @abstractmethod
+    def get_all_traces(
+        self,
+        pattern: Optional[str] = None,
+        agent_name: Optional[str] = None,
+        status: Optional[str] = None,
+        limit: Optional[int] = None,
+    ) -> List[AgentTrace]:
+        """
+        Retrieves all execution traces from the database matching optional filtering criteria.
+        """
+        pass
+
+    @abstractmethod
+    def export_all_traces(
+        self,
+        pattern: Optional[str] = None,
+        agent_name: Optional[str] = None,
+        status: Optional[str] = None,
+        limit: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Exports all execution traces as a list of structured dictionaries.
+        """
+        pass

@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict, Any
 from pydantic import BaseModel, Field, model_validator
 from .records import (
     OSGuidelineRecord,
@@ -355,6 +355,61 @@ class AgentTrace(BaseModel):
             trace_json=record.trace_json,
             created_at=record.created_at,
         )
+
+    def to_export_dict(self) -> Dict[str, Any]:
+        import json
+
+        parsed_trace = None
+        if self.trace_json:
+            try:
+                parsed_trace = json.loads(self.trace_json)
+            except Exception:
+                parsed_trace = None
+
+        if isinstance(parsed_trace, dict):
+            # Extract and consolidate token_usage inside execution_trace
+            token_usage = parsed_trace.pop("total_token_usage", None) or {
+                "prompt_tokens": parsed_trace.pop(
+                    "prompt_tokens", self.prompt_tokens or 0
+                ),
+                "completion_tokens": parsed_trace.pop(
+                    "completion_tokens", self.completion_tokens or 0
+                ),
+                "total_tokens": parsed_trace.pop("total_tokens", self.total_tokens or 0),
+            }
+            parsed_trace.pop("prompt_tokens", None)
+            parsed_trace.pop("completion_tokens", None)
+            parsed_trace.pop("total_tokens", None)
+            parsed_trace["token_usage"] = token_usage
+
+            # Clean up steps in execution_trace: keep token_usage, remove redundant flat token counts
+            if "steps" in parsed_trace and isinstance(parsed_trace["steps"], list):
+                for step in parsed_trace["steps"]:
+                    if isinstance(step, dict):
+                        step.pop("prompt_tokens", None)
+                        step.pop("completion_tokens", None)
+                        step.pop("total_tokens", None)
+                        if "token_usage" not in step or step["token_usage"] is None:
+                            step["token_usage"] = {
+                                "prompt_tokens": 0,
+                                "completion_tokens": 0,
+                                "total_tokens": 0,
+                            }
+
+        return {
+            "id": self.id,
+            "msf_path": self.msf_path,
+            "agent_name": self.agent_name,
+            "status": self.status,
+            "failed_step_name": self.failed_step_name,
+            "failed_step_index": self.failed_step_index,
+            "error_category": self.error_category,
+            "error_message": self.error_message,
+            "diagnostic_hint": self.diagnostic_hint,
+            "duration_seconds": self.duration_seconds,
+            "created_at": self.created_at,
+            "execution_trace": parsed_trace,
+        }
 
 
 class FailedModuleSummary(BaseModel):

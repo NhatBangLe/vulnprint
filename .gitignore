@@ -2,3 +2,8 @@
 AGENTS.md
 .venv
 __pycache__
+blueprints
+lab_hub.db
+RUN/
+tests/
+runs/
