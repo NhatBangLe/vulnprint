@@ -58,7 +58,8 @@ class MarkdownBlueprintService(BlueprintService):
 
             software = self.soft_service.get_software_by_path(msf_path)
             if not software:
-                software = Software(path=msf_path, name="Unknown")
+                self._logger.error(f"Blueprint generation failed: No software found for MSF module '{msf_path}'.")
+                return None
 
             data = {
                 "os_name": None,
