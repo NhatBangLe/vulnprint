@@ -11,30 +11,7 @@ It connects to a live Metasploit RPC daemon (`msfrpcd`), extracts module details
 This project is the implementation accompanying our paper:
 > **"Vulnprint: Automated Lab Blueprint Generation with LLM Agents for Exploit Reproduction from Metasploit Modules"**
 
-### Reproducing the Evaluation
-
-The benchmark dataset evaluated in the paper is stored in [`evaluation_data/msf_paths.json`](evaluation_data/msf_paths.json), which contains the list of Metasploit module paths evaluated in the study.
-
-To reproduce the evaluation pipeline:
-
-1. **Start Metasploit RPC Daemon**:
-   Ensure `msfrpcd` is running (see [Installation & Setup](#-installation--setup) for setup details):
-   ```bash
-   msfrpcd -f -P <your_rpc_password>
-   ```
-
-2. **Run Vulnprint Evaluation Batch**:
-   Execute `search` using the `-f` flag pointing to `evaluation_data/msf_paths.json`:
-   ```bash
-   python src/main.py search -f evaluation_data/msf_paths.json
-   ```
-   This processes all benchmark modules through Vulnprint's extraction and blueprint generation pipeline.
-
-3. **Verify Results**:
-   View database analytics:
-   ```bash
-   python src/main.py db analytics
-   ```
+To reproduce the evaluation, please refer to the `evaluation` folder.
 
 ---
 
