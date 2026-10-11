@@ -50,8 +50,39 @@ class DefaultOSGuidelineService(OSGuidelineService):
         return None
 
     def find_all_potential_guidelines(
-        self, target_system_id: Optional[int], platforms: List[str] = None
+        self, target_system_id: Optional[int], platforms: Optional[List[str]] = None
     ) -> List[Tuple[int, OSGuideline]]:
+        """Calculate the compatibility-gated similarity score between a target OS and a guideline.
+        
+        The scoring model evaluates candidate guidelines against four OS attributes
+        on a 100-point scale:
+            
+            - Platform:     30 points
+            - Distribution: 30 points
+            - Version:      20 points
+            - Architecture: 20 points
+        
+        For each attribute 'a', a match factor (µ_a) is computed:
+            
+            - µ_a = 1.0 (Full Match):
+                Values are identical, or both the target and guideline are unspecified.
+            - µ_a = 0.5 (Partial Match):
+                Target attribute is generic/unspecified, but the guideline specifies
+                a concrete value.
+            - µ_a = 0.0 (Conflict / Mismatch):
+                Attribute values conflict.
+        
+        Hard Compatibility Gating (κ):
+            
+            All attributes must satisfy µ_a > 0. If any attribute conflicts (µ_a = 0),
+            the candidate is strictly disqualified and the overall score is 0.
+        
+        Overall Score (σ):
+            
+            When compatible, the final score is the weighted sum:
+                σ = Σ (weight_a * µ_a)
+        """
+
         target_system = None
         if target_system_id:
             target_system = self.target_system_repo.get_by_id(target_system_id)
@@ -142,6 +173,7 @@ class DefaultOSGuidelineService(OSGuidelineService):
                     else:
                         score += 10
 
+            # Score in range [0, 100]
             if score > 0:
                 candidates.append((score, OSGuideline.from_record(record)))
 
@@ -158,7 +190,7 @@ class DefaultOSGuidelineService(OSGuidelineService):
             os_guide = OSGuideline.from_record(record)
             items.append(
                 OSGuidelineCoverageItem(
-                    guideline_id=os_guide.id,
+                    guideline_id=os_guide.id, # type: ignore
                     os_name=os_guide.os_name,
                     status=os_guide.status.value,
                     coverage_count=count,

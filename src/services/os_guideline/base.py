@@ -24,7 +24,7 @@ class OSGuidelineService(ABC):
 
     @abstractmethod
     def find_all_potential_guidelines(
-        self, target_system_id: Optional[int], platforms: List[str] = None
+        self, target_system_id: Optional[int], platforms: Optional[List[str]] = None
     ) -> List[Tuple[int, OSGuideline]]:
         """
         Finds all potential OS guidelines in the database matching the criteria.
